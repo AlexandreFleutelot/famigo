@@ -1,0 +1,8 @@
+{
+  "name": "@famigo/ui",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "typecheck": "tsc --project tsconfig.json"
+  }
+}

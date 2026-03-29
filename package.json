@@ -1,0 +1,25 @@
+{
+  "name": "famigo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "npm@11.6.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "npm run start --workspace @famigo/mobile",
+    "android": "npm run android --workspace @famigo/mobile",
+    "ios": "npm run ios --workspace @famigo/mobile",
+    "web": "npm run web --workspace @famigo/mobile",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.4"
+  }
+}
