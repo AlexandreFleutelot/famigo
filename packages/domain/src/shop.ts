@@ -21,8 +21,16 @@ export interface PurchaseShopItemResult {
 }
 
 export function purchaseShopItem(input: PurchaseShopItemInput): PurchaseShopItemResult {
-  assertDomain(input.item.familyId === input.familyId, "SHOP_ITEM_FAMILY_MISMATCH", "Le cadeau n'appartient pas a la famille.");
-  assertDomain(input.item.active, "SHOP_ITEM_INACTIVE", "Le cadeau selectionne n'est pas disponible.");
+  assertDomain(
+    input.item.familyId === input.familyId,
+    "SHOP_ITEM_FAMILY_MISMATCH",
+    "Le cadeau n'appartient pas a la famille."
+  );
+  assertDomain(
+    input.item.active,
+    "SHOP_ITEM_INACTIVE",
+    "Le cadeau selectionne n'est pas disponible."
+  );
   assertDomain(
     Number.isInteger(input.item.cost) && input.item.cost > 0,
     "INVALID_SHOP_ITEM_COST",

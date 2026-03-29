@@ -10,9 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "jsx": "react-jsx",
-    "lib": [
-      "ES2022"
-    ],
+    "lib": ["ES2022"],
     "resolveJsonModule": true,
     "skipLibCheck": true
   }

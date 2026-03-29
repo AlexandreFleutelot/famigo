@@ -8,11 +8,7 @@ export class DomainError extends Error {
   }
 }
 
-export function assertDomain(
-  condition: boolean,
-  code: string,
-  message: string
-): asserts condition {
+export function assertDomain(condition: boolean, code: string, message: string): asserts condition {
   if (!condition) {
     throw new DomainError(code, message);
   }

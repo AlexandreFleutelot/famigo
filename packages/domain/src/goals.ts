@@ -31,9 +31,21 @@ export function createGoal(input: {
 }): FamilyGoal {
   const creator = input.members.find((member) => member.id === input.createdByMemberId);
 
-  assertDomain(creator !== undefined, "GOAL_CREATOR_NOT_FOUND", "Le createur de l'objectif est introuvable.");
-  assertDomain(creator.familyId === input.familyId, "GOAL_CREATOR_FAMILY_MISMATCH", "Le createur n'appartient pas a la famille.");
-  assertDomain(creator.role === "parent", "GOAL_PARENT_ROLE_REQUIRED", "Seul un parent peut gerer les objectifs.");
+  assertDomain(
+    creator !== undefined,
+    "GOAL_CREATOR_NOT_FOUND",
+    "Le createur de l'objectif est introuvable."
+  );
+  assertDomain(
+    creator.familyId === input.familyId,
+    "GOAL_CREATOR_FAMILY_MISMATCH",
+    "Le createur n'appartient pas a la famille."
+  );
+  assertDomain(
+    creator.role === "parent",
+    "GOAL_PARENT_ROLE_REQUIRED",
+    "Seul un parent peut gerer les objectifs."
+  );
   assertDomain(
     Number.isInteger(input.targetVoteCount) && input.targetVoteCount > 0,
     "INVALID_GOAL_TARGET",
@@ -51,16 +63,31 @@ export function createGoal(input: {
 }
 
 export function castGoalVote(input: CastGoalVoteInput): CastGoalVoteResult {
-  assertDomain(input.goal.familyId === input.familyId, "GOAL_FAMILY_MISMATCH", "L'objectif n'appartient pas a la famille.");
-  assertDomain(input.goal.status === "active", "GOAL_NOT_ACTIVE", "Seul un objectif actif peut recevoir un vote.");
+  assertDomain(
+    input.goal.familyId === input.familyId,
+    "GOAL_FAMILY_MISMATCH",
+    "L'objectif n'appartient pas a la famille."
+  );
+  assertDomain(
+    input.goal.status === "active",
+    "GOAL_NOT_ACTIVE",
+    "Seul un objectif actif peut recevoir un vote."
+  );
 
   const member = input.members.find((candidate) => candidate.id === input.memberId);
 
   assertDomain(member !== undefined, "VOTER_NOT_FOUND", "Le membre votant est introuvable.");
-  assertDomain(member.familyId === input.familyId, "VOTER_FAMILY_MISMATCH", "Le votant n'appartient pas a la famille.");
+  assertDomain(
+    member.familyId === input.familyId,
+    "VOTER_FAMILY_MISMATCH",
+    "Le votant n'appartient pas a la famille."
+  );
 
   const hasAlreadyVoted = input.existingVotes.some(
-    (vote) => vote.familyId === input.familyId && vote.memberId === input.memberId && vote.dayKey === input.dayKey
+    (vote) =>
+      vote.familyId === input.familyId &&
+      vote.memberId === input.memberId &&
+      vote.dayKey === input.dayKey
   );
 
   assertDomain(
@@ -78,7 +105,9 @@ export function castGoalVote(input: CastGoalVoteInput): CastGoalVoteResult {
     createdAt: input.createdAt,
   };
 
-  const allVotesForGoal = input.existingVotes.filter((existingVote) => existingVote.familyGoalId === input.goal.id);
+  const allVotesForGoal = input.existingVotes.filter(
+    (existingVote) => existingVote.familyGoalId === input.goal.id
+  );
   const totalVotes = allVotesForGoal.length + 1;
   const reachedTarget = totalVotes >= input.goal.targetVoteCount;
 

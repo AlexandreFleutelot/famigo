@@ -3,10 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "packageManager": "npm@11.6.2",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "start": "npm run start --workspace @famigo/mobile",
     "android": "npm run android --workspace @famigo/mobile",

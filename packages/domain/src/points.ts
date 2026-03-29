@@ -156,10 +156,12 @@ function normalizeAllocationLines(
     );
   }
 
-  const normalizedLines = Array.from(pointsByReceiver.entries()).map(([receiverMemberId, points]) => ({
-    receiverMemberId,
-    points,
-  }));
+  const normalizedLines = Array.from(pointsByReceiver.entries()).map(
+    ([receiverMemberId, points]) => ({
+      receiverMemberId,
+      points,
+    })
+  );
 
   const total = normalizedLines.reduce((sum, line) => sum + line.points, 0);
   assertDomain(

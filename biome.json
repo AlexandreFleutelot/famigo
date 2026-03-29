@@ -20,11 +20,6 @@
     }
   },
   "files": {
-    "ignore": [
-      "node_modules",
-      ".expo",
-      "dist",
-      "coverage"
-    ]
+    "ignore": ["node_modules", ".expo", "dist", "coverage"]
   }
 }

@@ -15,9 +15,7 @@ export interface SelectMemberSessionResult {
   historyEvent: HistoryEvent;
 }
 
-export function selectMemberSession(
-  input: SelectMemberSessionInput
-): SelectMemberSessionResult {
+export function selectMemberSession(input: SelectMemberSessionInput): SelectMemberSessionResult {
   assertDomain(/^\d{4}$/.test(input.pin), "INVALID_PIN_FORMAT", "Le PIN doit contenir 4 chiffres.");
 
   const member = input.members.find((candidate) => candidate.id === input.memberId);
