@@ -1,0 +1,4 @@
+model = "gpt-5.4"
+
+[projects."/Users/alexandrefleutelot/devs/typescript/famigo"]
+trust_level = "trusted"
