@@ -44,6 +44,12 @@ La couche applicative orchestre :
 - l'execution des taches planifiees de fin de journee ;
 - la transformation des donnees domaine vers les vues.
 
+Decision d'implementation en cours :
+
+- une couche `apps/mobile/src/application` fait l'orchestration entre repositories Supabase, domaine et UI ;
+- cette couche expose des use cases explicites plutot que de laisser l'UI appeler les repositories directement ;
+- les conversions `record -> domaine` et `domaine -> payload d'infrastructure` doivent y rester centralisees.
+
 ### 3.3 UI mobile
 
 L'UI :
@@ -125,6 +131,33 @@ Consequence technique :
 - l'identification initiale repose sur la famille et les profils visibles ;
 - la verification du PIN doit etre traitee comme un sujet de securite, meme si le parcours est simplifie.
 
+Etat d'implementation :
+
+- le schema base de donnees stocke `pin_hash` ;
+- la couche applicative mobile introduit donc un composant de verification de PIN dedie ;
+- le domaine ne doit pas rester durablement couple a l'hypothese d'un `pin` en clair.
+
+Decision restante :
+
+- choisir si la verification definitive du PIN vit dans une fonction applicative locale, une RPC dediee ou un autre mecanisme de verification securise.
+
+## 9 bis. Decision sur le placement des regles metier
+
+Constat :
+
+- certaines regles sont deja exprimees dans `packages/domain` ;
+- certaines executions critiques sont atomiques en base via RPC SQL, notamment `purchase_reward`, `cast_goal_vote` et `finalize_daily_point_allocation`.
+
+Decision provisoire :
+
+- garder le domaine TypeScript comme reference de modelisation et de validation locale ;
+- garder les RPC SQL pour les operations transactionnelles qui doivent etre atomiques ;
+- documenter explicitement toute divergence temporaire entre validation locale et execution SQL.
+
+Consequence :
+
+- la couche applicative mobile doit faire le pont entre les deux, sans dupliquer silencieusement les regles dans l'UI.
+
 ## 10. Decision sur la complexite a eviter
 
 Ne pas introduire en v1 :
@@ -140,3 +173,5 @@ Ne pas introduire en v1 :
 - La solution technique concrete de persistance n'est pas tranchee dans ce document.
 - Le mecanisme exact de planification de la cloture quotidienne reste a definir.
 - Le mode de rattachement d'un appareil a une famille devra etre precise sans contredire le parcours simple de connexion.
+- La strategie de cache et de refresh de la couche applicative mobile reste a definir.
+- Le calcul unique de `dayKey` n'est pas encore centralise dans un service partage.

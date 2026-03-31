@@ -48,6 +48,7 @@ Elle ne couvre pas l'administration web, la monetisation ni les fonctionnalites 
 - Le login n'exige pas de mot de passe alphanumerique.
 - Le PIN contient exactement 4 chiffres.
 - Le choix du membre precede toujours la saisie du PIN.
+- La verification concrete du PIN doit se faire a partir d'un secret derive ou hash cote infrastructure, pas d'un PIN stocke en clair.
 
 ### 4.3 Cas limites
 
@@ -102,6 +103,7 @@ La boutique permet aux membres d'echanger leurs points disponibles contre des ca
 
 - Si le solde est insuffisant, l'achat est refuse.
 - Un achat n'attend pas la fin de journee pour etre pris en compte.
+- Si l'etat visible du solde est calcule cote mobile, il doit rester aligne sur la source de verite `point_transactions`.
 
 ## 7. Objectifs famille
 
@@ -136,6 +138,7 @@ En l'absence de precision contraire, la v1 retient une interpretation stricte :
 
 - Un vote supplementaire dans la meme journee est refuse.
 - Un vote sur un objectif supprime ou inactif est refuse.
+- Si un vote fait atteindre la cible, le changement de statut et l'evenement d'historique doivent etre produits atomiquement.
 
 ## 8. Historique
 
@@ -181,3 +184,4 @@ Les champs exacts du profil ne sont pas entierement definis dans ce document.
 - La definition exacte de "fin de journee" dependra du fuseau horaire ou du parametre de famille retenu en implementation.
 - Le comportement de reallocation apres un achat le meme jour devra etre verifie techniquement si le solde visible inclut ou non les gains en attente.
 - Le mode de gestion initiale des profils membres n'est pas specifie dans la v1.
+- Le remplacement complet du mock state par des flux applicatifs reels est encore progressif.

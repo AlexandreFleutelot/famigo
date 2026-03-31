@@ -31,6 +31,12 @@ Attributs metier minimaux :
 - pinHash ou equivalent de verification ;
 - avatar ou image de profil si necessaire pour le carousel.
 
+Note d'implementation :
+
+- le code domaine actuel contient encore un champ `pin` sur `Member` pour des usages de mock et de validation historique ;
+- la couche applicative mobile ne doit plus dependre de ce champ pour l'authentification reelle ;
+- la verification du PIN doit passer par un contrat dedie portant `pinHash` ou equivalent.
+
 Regles :
 
 - appartient a une seule famille en v1 ;
@@ -222,8 +228,26 @@ Il represente les points alloues pendant la journee mais non encore credites ree
 - marquer un objectif comme atteint puis promis ;
 - produire l'historique partage.
 
-## 6. Hypotheses residuelles
+## 6. Traduction applicative actuelle
+
+Dans l'application mobile, ces regles sont maintenant relayees par une couche `application` qui :
+
+- charge les membres, cadeaux, objectifs et mouvements depuis les repositories Supabase ;
+- mappe les enregistrements techniques vers les types du domaine ;
+- expose des use cases cibles pour l'UI ;
+- laisse les composants visuels sans logique metier critique.
+
+Use cases actuellement poses dans `apps/mobile/src/application` :
+
+- `loginWithPin` ;
+- `loadShop` ;
+- `buyReward` ;
+- `loadGoals` ;
+- `castGoalVote`.
+
+## 7. Hypotheses residuelles
 
 - Le modele exact de session d'authentification n'est pas decrit ici ; seul le comportement metier de connexion est fixe.
 - Le statut final d'un objectif atteint peut etre modelise par un ou deux etats techniques, selon les besoins d'implementation.
 - L'historique peut etre une projection dediee plutot qu'une source de verite transactionnelle.
+- Le domaine n'a pas encore ete nettoye completement de l'hypothese d'un `pin` en clair.
