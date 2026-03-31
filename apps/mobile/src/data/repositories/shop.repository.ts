@@ -9,12 +9,21 @@ export interface RewardRecord {
 }
 
 export interface PurchaseRewardInput {
+  familyId: string;
+  memberId: string;
   rewardId: string;
+  purchasedAt?: string;
 }
 
 export interface PurchaseRewardResult {
-  success: boolean;
-  error?: string;
+  purchaseId: string;
+  pointTransactionId: string;
+  auditEventId: string;
+  memberId: string;
+  rewardId: string;
+  cost: number;
+  purchasedAt: string;
+  resultingBalance: number;
 }
 
 const REWARD_COLUMNS = "id, name, image_url, cost, active";
@@ -36,16 +45,16 @@ export async function getRewards(familyId: string): Promise<RewardRecord[]> {
 }
 
 export async function purchaseReward(input: PurchaseRewardInput): Promise<PurchaseRewardResult> {
-  const { error } = await supabase.rpc("purchase_reward", {
+  const { data, error } = await supabase.rpc("purchase_reward", {
+    p_family_id: input.familyId,
+    p_member_id: input.memberId,
     p_reward_id: input.rewardId,
+    p_purchased_at: input.purchasedAt,
   });
 
   if (error) {
-    return {
-      success: false,
-      error: error.message,
-    };
+    throw error;
   }
 
-  return { success: true };
+  return data as PurchaseRewardResult;
 }
