@@ -25,7 +25,8 @@ Il suit le domaine existant dans `packages/domain` et garde `point_transactions`
 ### 3.2 Timestamps
 
 - Toutes les tables ont au minimum `created_at`.
-- Les tables susceptibles d'etre modifiees ont aussi `updated_at` maintenu par trigger.
+- Les tables d'etat editables ont aussi `updated_at` maintenu par trigger.
+- Les tables de faits append-only n'ont pas `updated_at` afin d'eviter de donner l'impression qu'elles sont modifiables.
 - Les dates metier restent explicites quand elles ont un sens fonctionnel : `purchased_at`, `occurred_at`, `finalized_at`, `promised_at`.
 
 ### 3.3 `day_key`
@@ -114,12 +115,13 @@ Champs :
 - `cost_snapshot`
 - `purchased_at`
 - `created_at`
-- `updated_at`
 
 Contraintes :
 
 - FK vers `members` et `rewards` dans la meme famille ;
-- `cost_snapshot > 0`.
+- `cost_snapshot > 0` ;
+- trigger qui refuse l'insertion si le reward n'est pas actif ;
+- table append-only : pas de modification ni suppression metier.
 
 Note :
 
@@ -164,13 +166,13 @@ Champs :
 - `member_id`
 - `family_goal_id`
 - `created_at`
-- `updated_at`
 
 Contraintes :
 
 - FK vers `members` et `family_goals` dans la meme famille ;
 - unicite `(family_id, member_id, day_key)` pour garantir un seul vote par jour ;
-- trigger qui refuse un vote sur un objectif non actif.
+- trigger qui refuse un vote sur un objectif non actif ;
+- table append-only : un vote insere ne peut plus etre modifie ni supprime.
 
 ### 4.7 `daily_point_allocations`
 
@@ -192,7 +194,8 @@ Contraintes :
 - FK vers le membre donneur dans la meme famille ;
 - unicite `(family_id, day_key, giver_member_id)` ;
 - `status` limite a `draft` ou `finalized` ;
-- `finalized_at` obligatoire si et seulement si l'allocation est finalisee.
+- `finalized_at` obligatoire si et seulement si l'allocation est finalisee ;
+- une allocation finalisee ne peut plus etre modifiee sur ses champs metier.
 
 ### 4.8 `daily_point_allocation_lines`
 
@@ -235,7 +238,6 @@ Champs :
 - `reward_purchase_id`
 - `occurred_at`
 - `created_at`
-- `updated_at`
 
 Contraintes :
 
@@ -246,8 +248,15 @@ Contraintes :
 - coherence forte entre `type`, signe du delta et reference source :
   - `daily_points_received` => delta positif, `day_key` obligatoire, reference allocation obligatoire ;
   - `shop_purchase` => delta negatif, reference achat obligatoire.
+- pour `daily_points_received`, trigger complementaire imposant :
+  - une allocation referencee et finalisee ;
+  - un `day_key` identique a celui de l'allocation ;
+  - un `occurred_at` identique au `finalized_at` de l'allocation ;
+  - un receveur reellement present dans les lignes finalisees ;
+  - un `points_delta` identique aux points finalises pour ce receveur.
 - unicite `(daily_point_allocation_id, member_id)` pour eviter de crediter deux fois le meme receveur pour une meme cloture ;
-- unicite `reward_purchase_id` pour eviter plusieurs debits pour un meme achat.
+- unicite `reward_purchase_id` pour eviter plusieurs debits pour un meme achat ;
+- table append-only : aucune modification ni suppression apres insertion.
 
 ### 4.10 `audit_events`
 
@@ -263,13 +272,13 @@ Champs :
 - `occurred_at`
 - `metadata`
 - `created_at`
-- `updated_at`
 
 Contraintes :
 
 - FK vers la famille ;
 - FK optionnelles vers acteur et sujet ;
-- `metadata` doit rester un objet JSON.
+- `metadata` doit rester un objet JSON ;
+- table append-only : aucune modification ni suppression apres insertion.
 
 Types d'evenement retenus :
 
@@ -300,7 +309,9 @@ Types d'evenement retenus :
 - pas d'auto-allocation ;
 - pas de depassement du budget de 5 points dans une allocation ;
 - pas de modification de lignes une fois l'allocation finalisee ;
+- pas de modification metier d'une allocation une fois finalisee ;
 - coherence des types de transactions de points ;
+- coherence fine des gains journaliers avec leur allocation finalisee ;
 - seuls les parents peuvent creer ou modifier un objectif.
 
 ## 7. Ce que le schema ne garantit pas seul
@@ -310,6 +321,9 @@ Ces regles restent principalement du ressort du domaine et de l'orchestration ap
 - verification du PIN ;
 - calcul exact du `day_key` selon le fuseau retenu ;
 - refus d'un achat si le solde recalcule est insuffisant ;
+- atomicite complete des ecritures metier composees :
+  - achat = achat + transaction de points + evenement d'audit ;
+  - cloture = finalisation allocation + transactions de points + evenements d'audit ;
 - idempotence complete du job de cloture de fin de journee ;
 - politique exacte d'archivage ou de suppression logique des membres et objectifs.
 
