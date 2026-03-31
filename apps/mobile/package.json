@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@famigo/domain": "*",
+    "@supabase/supabase-js": "^2.57.4",
     "expo": "~55.0.0",
     "react": "19.2.0",
     "react-native": "0.83.0"
