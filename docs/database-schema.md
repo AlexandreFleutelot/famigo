@@ -327,7 +327,28 @@ Ces regles restent principalement du ressort du domaine et de l'orchestration ap
 - idempotence complete du job de cloture de fin de journee ;
 - politique exacte d'archivage ou de suppression logique des membres et objectifs.
 
-## 8. Hypotheses explicites
+## 8. RPC transactionnelles
+
+Pour les ecritures critiques v1, la base expose trois fonctions RPC transactionnelles :
+
+- `purchase_reward`
+- `finalize_daily_point_allocation`
+- `cast_goal_vote`
+
+Leur role est de :
+
+- lire les donnees necessaires en base ;
+- effectuer les validations de coherence indispensables a la persistance ;
+- ecrire tous les faits associes dans une seule transaction base de donnees ;
+- retourner un resultat compact utile au mobile.
+
+Limite volontaire :
+
+- ces RPC re-dupliquent une petite partie des regles metier critiques en SQL pour garantir l'atomicite ;
+- `packages/domain` reste la reference metier principale ;
+- le calcul du `day_key` et l'orchestration produit globale restent hors SQL.
+
+## 9. Hypotheses explicites
 
 - Le produit reste mono-usage v1, mais le schema est multi-famille des le depart via `family_id`.
 - Aucun champ de billing, d'abonnement ou d'organisation SaaS n'est introduit.
