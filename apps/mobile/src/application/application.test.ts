@@ -4,12 +4,16 @@ import type { Family, FamilyGoal, Member, PointLedgerEntry, ShopItem } from "@fa
 
 import { ApplicationError } from "./errors";
 import { createMemoryAppSessionGateway } from "./session";
+import type { AuditEvent } from "../data/repositories/audit_events.repository";
 import { createBuyRewardUseCase } from "./use-cases/buy-reward";
 import { createCastGoalVoteUseCase } from "./use-cases/cast-goal-vote";
 import { createClearSessionUseCase } from "./use-cases/clear-session";
+import { createFinalizeDailyPointsUseCase } from "./use-cases/finalize-daily-points";
 import { createGetFamiliesUseCase } from "./use-cases/get-families";
 import { createGetMembersForSelectedFamilyUseCase } from "./use-cases/get-members-for-selected-family";
 import { createLoadDailyPointsUseCase } from "./use-cases/load-daily-points";
+import { createLoadPendingPointsUseCase } from "./use-cases/load-pending-points";
+import { createLoadHistoryUseCase } from "./use-cases/load-history";
 import { createLoadShopUseCase } from "./use-cases/load-shop";
 import { createLoginWithPinUseCase, type PinVerifier } from "./use-cases/login-with-pin";
 import { createRestoreSessionUseCase } from "./use-cases/restore-session";
@@ -225,6 +229,79 @@ describe("application use cases", () => {
     });
   });
 
+  it("loads the shared history from backend audit events", async () => {
+    const auditEvents: ReadonlyArray<AuditEvent> = [
+        {
+          id: "audit-1",
+          familyId,
+          type: "shop_purchase_made" as const,
+          occurredAt: "2026-03-31T20:00:00.000Z",
+          actorMemberId: memberId,
+          subjectMemberId: memberId,
+          metadata: {
+            purchaseId: "purchase-1",
+            rewardId: "reward-1",
+            cost: 2,
+          },
+        },
+        {
+          id: "audit-2",
+          familyId,
+          type: "member_session_started" as const,
+          occurredAt: "2026-03-31T18:00:00.000Z",
+          actorMemberId: memberId,
+          metadata: {},
+        },
+        {
+          id: "audit-3",
+          familyId,
+          type: "goal_vote_recorded" as const,
+          occurredAt: "2026-03-31T19:00:00.000Z",
+          actorMemberId: memberId,
+          metadata: {
+            goalId: "goal-1",
+            dayKey: "2026-03-31",
+          },
+        },
+      ];
+    const getAuditEvents = vi.fn(async () => auditEvents);
+
+    const loadHistory = createLoadHistoryUseCase({ getAuditEvents });
+    const result = await loadHistory({ familyId });
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        events: [
+          {
+            id: "audit-1",
+            familyId,
+            type: "shop_purchase_made",
+            occurredAt: "2026-03-31T20:00:00.000Z",
+            actorMemberId: memberId,
+            subjectMemberId: memberId,
+            metadata: {
+              purchaseId: "purchase-1",
+              rewardId: "reward-1",
+              cost: 2,
+            },
+          },
+          {
+            id: "audit-3",
+            familyId,
+            type: "goal_vote_recorded",
+            occurredAt: "2026-03-31T19:00:00.000Z",
+            actorMemberId: memberId,
+            metadata: {
+              goalId: "goal-1",
+              dayKey: "2026-03-31",
+            },
+          },
+        ],
+      },
+    });
+  });
+
   it("loads the current daily allocation for the connected member", async () => {
     const member: Member = {
       id: memberId,
@@ -278,6 +355,31 @@ describe("application use cases", () => {
     });
   });
 
+  it("loads the real pending points for the connected member", async () => {
+    const getPendingPointsForMember = vi.fn(async () => 4);
+
+    const loadPendingPoints = createLoadPendingPointsUseCase({
+      getPendingPointsForMember,
+    });
+    const result = await loadPendingPoints({
+      familyId,
+      memberId,
+      dayKey: "2026-03-31",
+    });
+
+    expect(getPendingPointsForMember).toHaveBeenCalledWith({
+      familyId,
+      memberId,
+      dayKey: "2026-03-31",
+    });
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        pendingPoints: 4,
+      },
+    });
+  });
+
   it("saves a daily point draft with domain validation before persistence", async () => {
     const getDailyAllocationForMember = vi.fn(async () => null);
     const saveDailyAllocationDraft = vi.fn(async () => ({
@@ -319,6 +421,85 @@ describe("application use cases", () => {
         },
         allocatedPoints: 4,
         remainingPoints: 1,
+      },
+    });
+  });
+
+  it("finalizes daily points through the rpc and reloads local projections", async () => {
+    const finalizeDailyAllocation = vi.fn(async () => ({
+      success: true,
+    }));
+    const getDailyAllocationForMember = vi.fn(async () => ({
+      id: "allocation-1",
+      familyId,
+      dayKey: "2026-03-31",
+      giverMemberId: memberId,
+      status: "finalized" as const,
+      finalizedAt: "2026-03-31T21:00:00.000Z",
+      lines: [{ receiverMemberId: "member-2", points: 5 }],
+    }));
+    const getPendingPointsForMember = vi.fn(async () => 1);
+    const getPointTransactions = vi.fn(
+      async (): Promise<ReadonlyArray<PointLedgerEntry>> => [
+        {
+          id: "ledger-1",
+          familyId,
+          memberId,
+          type: "daily_points_received",
+          pointsDelta: 3,
+          occurredAt: "2026-03-31T18:00:00.000Z",
+        },
+      ]
+    );
+
+    const finalizeDailyPoints = createFinalizeDailyPointsUseCase({
+      finalizeDailyAllocation,
+      getDailyAllocationForMember,
+      getPendingPointsForMember,
+      getPointTransactions,
+    });
+    const result = await finalizeDailyPoints({
+      allocationId: "allocation-1",
+      familyId,
+      memberId,
+      dayKey: "2026-03-31",
+    });
+
+    expect(finalizeDailyAllocation).toHaveBeenCalledWith("allocation-1");
+    expect(getDailyAllocationForMember).toHaveBeenCalledWith({
+      familyId,
+      giverMemberId: memberId,
+      dayKey: "2026-03-31",
+    });
+    expect(getPendingPointsForMember).toHaveBeenCalledWith({
+      familyId,
+      memberId,
+      dayKey: "2026-03-31",
+    });
+    expect(getPointTransactions).toHaveBeenCalledWith(memberId);
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        allocation: {
+          id: "allocation-1",
+          familyId,
+          dayKey: "2026-03-31",
+          giverMemberId: memberId,
+          status: "finalized",
+          finalizedAt: "2026-03-31T21:00:00.000Z",
+          lines: [{ receiverMemberId: "member-2", points: 5 }],
+        },
+        pendingPoints: 1,
+        ledgerEntries: [
+          {
+            id: "ledger-1",
+            familyId,
+            memberId,
+            type: "daily_points_received",
+            pointsDelta: 3,
+            occurredAt: "2026-03-31T18:00:00.000Z",
+          },
+        ],
       },
     });
   });

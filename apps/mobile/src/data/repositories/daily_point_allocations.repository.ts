@@ -17,6 +17,10 @@ export interface DailyPointAllocationLine {
   points: number;
 }
 
+interface PendingPointLineRow {
+  points: number;
+}
+
 export interface FinalizeDailyAllocationResult {
   success: boolean;
   error?: string;
@@ -96,6 +100,29 @@ export async function getDailyAllocationForMember(input: {
     allocation: data,
     lines: lines ?? [],
   });
+}
+
+export async function getPendingPointsForMember(input: {
+  familyId: string;
+  memberId: string;
+  dayKey: string;
+}): Promise<number> {
+  const { data, error } = await supabase
+    .from("daily_point_allocation_lines")
+    .select("points, daily_point_allocations!inner(family_id, day_key, status)")
+    .eq("receiver_member_id", input.memberId)
+    .eq("daily_point_allocations.family_id", input.familyId)
+    .eq("daily_point_allocations.day_key", input.dayKey)
+    .eq("daily_point_allocations.status", "draft");
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as ReadonlyArray<PendingPointLineRow> | null)?.reduce(
+    (sum, line) => sum + line.points,
+    0
+  ) ?? 0;
 }
 
 export async function saveDailyAllocationDraft(input: {

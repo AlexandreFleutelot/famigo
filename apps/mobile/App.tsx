@@ -1,4 +1,7 @@
 import {
+  DAILY_POINT_BUDGET,
+  getAllocatedPoints,
+  getPointBalance,
   getRemainingDailyPoints,
   sortHistoryEvents,
   type DailyPointAllocation,
@@ -16,10 +19,13 @@ import {
   createBuyRewardUseCase,
   createCastGoalVoteUseCase,
   createClearSessionUseCase,
+  createFinalizeDailyPointsUseCase,
   createGetFamiliesUseCase,
   createGetMembersForSelectedFamilyUseCase,
   createLoadDailyPointsUseCase,
   createLoadGoalsUseCase,
+  createLoadHistoryUseCase,
+  createLoadPendingPointsUseCase,
   createLoadShopUseCase,
   createLoginWithPinUseCase,
   createRestoreSessionUseCase,
@@ -31,8 +37,6 @@ import { verifyMemberPin } from "./src/data/repositories/members.repository";
 import {
   createInitialMockAppState,
   getCurrentMember,
-  getPendingPointsForMember,
-  getRemainingBudgetForMember,
   logout,
 } from "./src/mock-state";
 import {
@@ -84,8 +88,11 @@ export default function App() {
   const loadShop = useRef(createLoadShopUseCase()).current;
   const buyReward = useRef(createBuyRewardUseCase()).current;
   const loadGoals = useRef(createLoadGoalsUseCase()).current;
+  const loadHistory = useRef(createLoadHistoryUseCase()).current;
   const loadDailyPoints = useRef(createLoadDailyPointsUseCase()).current;
+  const loadPendingPoints = useRef(createLoadPendingPointsUseCase()).current;
   const saveDailyPoints = useRef(createSaveDailyPointsUseCase()).current;
+  const finalizeDailyPoints = useRef(createFinalizeDailyPointsUseCase()).current;
   const castGoalVote = useRef(createCastGoalVoteUseCase()).current;
   const restoreSession = useRef(
     createRestoreSessionUseCase({ appSessionGateway: appSessionGatewayRef.current })
@@ -109,10 +116,13 @@ export default function App() {
   const [currentDailyAllocation, setCurrentDailyAllocation] = useState<DailyPointAllocation | null>(
     null
   );
+  const [currentPendingPoints, setCurrentPendingPoints] = useState(0);
   const [isShopBusy, setIsShopBusy] = useState(false);
   const [loadedShopSessionKey, setLoadedShopSessionKey] = useState<string | null>(null);
   const [isGoalsBusy, setIsGoalsBusy] = useState(false);
   const [loadedGoalsSessionKey, setLoadedGoalsSessionKey] = useState<string | null>(null);
+  const [isHistoryBusy, setIsHistoryBusy] = useState(false);
+  const [loadedHistorySessionKey, setLoadedHistorySessionKey] = useState<string | null>(null);
   const [goalVoteCounts, setGoalVoteCounts] = useState<Record<string, number>>({});
   const [hasCurrentMemberVotedToday, setHasCurrentMemberVotedToday] = useState(false);
 
@@ -129,13 +139,6 @@ export default function App() {
     currentMember !== null && selectedFamily !== null
       ? `${selectedFamily.id}:${currentMember.id}`
       : null;
-
-  const currentBalance = currentMember
-    ? appState.ledgerEntries
-        .filter((entry) => entry.memberId === currentMember.id)
-        .reduce((sum, entry) => sum + entry.pointsDelta, 0)
-    : 0;
-  const currentPending = currentMember ? getPendingPointsForMember(appState, currentMember.id) : 0;
   const currentPointsAllocation =
     currentMember !== null &&
     currentDailyAllocation !== null &&
@@ -143,18 +146,27 @@ export default function App() {
     currentDailyAllocation.dayKey === appState.currentDayKey
       ? currentDailyAllocation
       : null;
-  const currentAllocated =
-    currentPointsAllocation?.lines.reduce((sum, line) => sum + line.points, 0) ?? 0;
-  const currentRemaining =
-    currentPointsAllocation !== null
-      ? getRemainingDailyPoints(currentPointsAllocation)
-      : currentMember !== null
-        ? getRemainingBudgetForMember(appState, currentMember.id)
-        : 0;
+  const currentPointMetrics = useMemo(
+    () => ({
+      balance:
+        currentMember === null ? 0 : getPointBalance(appState.ledgerEntries, currentMember.id),
+      pending: currentMember === null ? 0 : currentPendingPoints,
+      allocated: currentPointsAllocation === null ? 0 : getAllocatedPoints(currentPointsAllocation),
+      remaining:
+        currentMember === null
+          ? 0
+          : currentPointsAllocation === null
+            ? DAILY_POINT_BUDGET
+            : getRemainingDailyPoints(currentPointsAllocation),
+    }),
+    [appState.ledgerEntries, currentMember, currentPendingPoints, currentPointsAllocation]
+  );
   const hasVotedToday = hasCurrentMemberVotedToday;
   const isPointsLoaded = currentSessionKey !== null && loadedPointsSessionKey === currentSessionKey;
   const isShopLoaded = currentSessionKey !== null && loadedShopSessionKey === currentSessionKey;
   const isGoalsLoaded = currentSessionKey !== null && loadedGoalsSessionKey === currentSessionKey;
+  const isHistoryLoaded =
+    currentSessionKey !== null && loadedHistorySessionKey === currentSessionKey;
 
   useEffect(() => {
     void bootstrapSessionFlow();
@@ -173,6 +185,15 @@ export default function App() {
 
     void refreshPointsData(selectedFamily.id, currentMember.id);
   }, [activeTab, currentMember, selectedFamily, isPointsBusy, isPointsLoaded, appState.currentDayKey]);
+
+  useEffect(() => {
+    if (currentMember === null || selectedFamily === null) {
+      setCurrentPendingPoints(0);
+      return;
+    }
+
+    void refreshPendingPointsData(selectedFamily.id, currentMember.id);
+  }, [currentSessionKey, currentMember, selectedFamily, appState.currentDayKey]);
 
   useEffect(() => {
     if (
@@ -203,6 +224,20 @@ export default function App() {
   }, [activeTab, currentMember, selectedFamily, isGoalsBusy, isGoalsLoaded]);
 
   useEffect(() => {
+    if (
+      activeTab !== "history" ||
+      currentMember === null ||
+      selectedFamily === null ||
+      isHistoryBusy ||
+      isHistoryLoaded
+    ) {
+      return;
+    }
+
+    void refreshHistoryData(selectedFamily.id, currentMember.id);
+  }, [activeTab, currentMember, selectedFamily, isHistoryBusy, isHistoryLoaded]);
+
+  useEffect(() => {
     setCurrentDailyAllocation(null);
     setLoadedPointsSessionKey(null);
   }, [currentSessionKey, appState.currentDayKey]);
@@ -210,6 +245,10 @@ export default function App() {
   useEffect(() => {
     setHasCurrentMemberVotedToday(false);
     setGoalVoteCounts({});
+  }, [currentSessionKey]);
+
+  useEffect(() => {
+    setLoadedHistorySessionKey(null);
   }, [currentSessionKey]);
 
   function syncMockStateWithSelectedSession(
@@ -291,6 +330,20 @@ export default function App() {
     return true;
   }
 
+  async function refreshPendingPointsData(familyId: string, memberId: string): Promise<void> {
+    const loadPendingPointsResult = await loadPendingPoints({
+      familyId,
+      memberId,
+      dayKey: appState.currentDayKey,
+    });
+
+    if (!loadPendingPointsResult.ok) {
+      return;
+    }
+
+    setCurrentPendingPoints(loadPendingPointsResult.data.pendingPoints);
+  }
+
   async function handlePointAllocationChange(receiverMemberId: string, nextPoints: number) {
     if (selectedFamily === null || currentMember === null || currentPointsAllocation === null) {
       return;
@@ -323,6 +376,44 @@ export default function App() {
     setCurrentDailyAllocation(saveDailyPointsResult.data.allocation);
     setLoadedPointsSessionKey(`${selectedFamily.id}:${currentMember.id}`);
     setIsPointsBusy(false);
+  }
+
+  async function handleFinalizeDailyPoints() {
+    if (
+      selectedFamily === null ||
+      currentMember === null ||
+      currentPointsAllocation === null ||
+      currentPointsAllocation.status === "finalized"
+    ) {
+      return;
+    }
+
+    setIsPointsBusy(true);
+    setMessage(null);
+
+    const finalizeDailyPointsResult = await finalizeDailyPoints({
+      allocationId: currentPointsAllocation.id,
+      familyId: selectedFamily.id,
+      memberId: currentMember.id,
+      dayKey: appState.currentDayKey,
+    });
+
+    if (!finalizeDailyPointsResult.ok) {
+      setIsPointsBusy(false);
+      setMessage(finalizeDailyPointsResult.error.message);
+      return;
+    }
+
+    setCurrentDailyAllocation(finalizeDailyPointsResult.data.allocation);
+    setCurrentPendingPoints(finalizeDailyPointsResult.data.pendingPoints);
+    setLoadedPointsSessionKey(`${selectedFamily.id}:${currentMember.id}`);
+    setLoadedHistorySessionKey(null);
+    setAppState((previous) => ({
+      ...previous,
+      ledgerEntries: [...finalizeDailyPointsResult.data.ledgerEntries],
+    }));
+    setIsPointsBusy(false);
+    setMessage("Repartition finalisee pour aujourd'hui.");
   }
 
   async function handleShopPurchase(rewardId: string) {
@@ -416,6 +507,32 @@ export default function App() {
     setHasCurrentMemberVotedToday(loadGoalsResult.data.hasMemberVotedToday);
     setLoadedGoalsSessionKey(`${familyId}:${memberId}`);
     setIsGoalsBusy(false);
+    setMessage(successMessage ?? null);
+
+    return true;
+  }
+
+  async function refreshHistoryData(
+    familyId: string,
+    memberId: string,
+    successMessage?: string
+  ): Promise<boolean> {
+    setIsHistoryBusy(true);
+
+    const loadHistoryResult = await loadHistory({ familyId });
+
+    if (!loadHistoryResult.ok) {
+      setIsHistoryBusy(false);
+      setMessage(loadHistoryResult.error.message);
+      return false;
+    }
+
+    setAppState((previous) => ({
+      ...previous,
+      historyEvents: [...loadHistoryResult.data.events],
+    }));
+    setLoadedHistorySessionKey(`${familyId}:${memberId}`);
+    setIsHistoryBusy(false);
     setMessage(successMessage ?? null);
 
     return true;
@@ -693,9 +810,11 @@ export default function App() {
     setSelectedFamilyId(null);
     setSelectedMemberId(null);
     setCurrentDailyAllocation(null);
+    setCurrentPendingPoints(0);
     setLoadedPointsSessionKey(null);
     setLoadedShopSessionKey(null);
     setLoadedGoalsSessionKey(null);
+    setLoadedHistorySessionKey(null);
     setGoalVoteCounts({});
     setHasCurrentMemberVotedToday(false);
     setPinInput("");
@@ -858,9 +977,12 @@ export default function App() {
           subtitle="Les points en attente ne sont pas encore dans le solde reel."
         >
           <MetricGrid>
-            <StatPill label="Solde reel" value={`${currentBalance} pts`} />
-            <StatPill label="En attente" value={`${currentPending} pts`} />
-            <StatPill label="A distribuer" value={`${currentRemaining} pts`} />
+            <StatPill label="Solde reel" value={`${currentPointMetrics.balance} pts`} />
+            <StatPill label="Points en attente" value={`${currentPointMetrics.pending} pts`} />
+            <StatPill
+              label="Restant a distribuer"
+              value={`${currentPointMetrics.remaining} pts`}
+            />
             <StatPill label="Vote du jour" value={hasVotedToday ? "fait" : "a faire"} />
           </MetricGrid>
         </SectionCard>
@@ -881,10 +1003,18 @@ export default function App() {
         title="Attribution des points"
         subtitle="Chaque membre dispose de 5 points par jour a repartir aux autres."
       >
-        <SectionCard title="Mon budget du jour">
+        <SectionCard
+          title="Mes reperes du jour"
+          subtitle="Le solde reel est distinct des points en attente tant que la journee n'est pas finalisee."
+        >
           <MetricGrid>
-            <StatPill label="Restant" value={`${currentRemaining} pts`} />
-            <StatPill label="Alloue" value={`${currentAllocated} pts`} />
+            <StatPill label="Solde reel" value={`${currentPointMetrics.balance} pts`} />
+            <StatPill label="Points en attente" value={`${currentPointMetrics.pending} pts`} />
+            <StatPill label="Deja alloues" value={`${currentPointMetrics.allocated} pts`} />
+            <StatPill
+              label="Restant a distribuer"
+              value={`${currentPointMetrics.remaining} pts`}
+            />
             <StatPill
               label="Statut"
               value={currentPointsAllocation?.status === "finalized" ? "finalise" : "brouillon"}
@@ -926,7 +1056,7 @@ export default function App() {
                   isPointsLoaded &&
                   !isPointsBusy &&
                   currentPointsAllocation?.status !== "finalized" &&
-                  currentRemaining > 0
+                  currentPointMetrics.remaining > 0
                 }
               />
             );
@@ -935,11 +1065,22 @@ export default function App() {
             <Text style={styles.helperText}>Aucun autre membre disponible pour recevoir des points.</Text>
           ) : null}
         </SectionCard>
-        <SectionCard subtitle="La finalisation de fin de journee reste volontairement hors circuit dans cette tranche.">
+        <SectionCard subtitle="La finalisation applique immediatement les gains via la RPC metier.">
           <PrimaryButton
-            label="Fin de journee bientot branchee"
-            onPress={() => {}}
-            disabled
+            label={
+              isPointsBusy
+                ? "Finalisation..."
+                : currentPointsAllocation?.status === "finalized"
+                  ? "Journee finalisee"
+                  : "Finaliser ma journee"
+            }
+            onPress={() => void handleFinalizeDailyPoints()}
+            disabled={
+              !isPointsLoaded ||
+              isPointsBusy ||
+              currentPointsAllocation === null ||
+              currentPointsAllocation.status === "finalized"
+            }
           />
           <Text style={styles.helperText}>
             Etat actuel :{" "}
@@ -956,7 +1097,7 @@ export default function App() {
     return (
       <AppScreen title="Boutique" subtitle="Les achats debitent immediatement le solde reel.">
         <SectionCard title="Mon solde disponible">
-          <StatPill label="Solde reel" value={`${currentBalance} pts`} />
+          <StatPill label="Solde reel" value={`${currentPointMetrics.balance} pts`} />
         </SectionCard>
         {!isShopLoaded ? (
           <SectionCard subtitle={isShopBusy ? "Chargement de la boutique..." : "Ouverture de la boutique..."} />
@@ -967,12 +1108,12 @@ export default function App() {
               label={
                 isShopBusy
                   ? "Traitement..."
-                  : currentBalance >= item.cost
+                  : currentPointMetrics.balance >= item.cost
                     ? "Acheter"
                     : "Solde insuffisant"
               }
               onPress={() => void handleShopPurchase(item.id)}
-              disabled={currentBalance < item.cost || isShopBusy}
+              disabled={currentPointMetrics.balance < item.cost || isShopBusy}
             />
           </SectionCard>
         ))}
@@ -1031,6 +1172,13 @@ export default function App() {
   function renderHistory() {
     return (
       <AppScreen title="Historique" subtitle="Visible par tous les membres de la famille.">
+        {!isHistoryLoaded ? (
+          <SectionCard
+            subtitle={
+              isHistoryBusy ? "Chargement de l'historique partage..." : "Ouverture de l'historique..."
+            }
+          />
+        ) : null}
         {appState.historyEvents.map((event) => (
           <SectionCard
             key={event.id}
@@ -1049,12 +1197,16 @@ export default function App() {
       <AppScreen title="Profil" subtitle="Synthese locale du membre connecte.">
         <SectionCard
           title={member.displayName}
-          subtitle={member.role === "parent" ? "Parent" : "Enfant"}
+          subtitle={`${member.role === "parent" ? "Parent" : "Enfant"} - les points en attente ne sont pas encore disponibles en boutique.`}
         >
           <MetricGrid>
-            <StatPill label="Solde reel" value={`${currentBalance} pts`} />
-            <StatPill label="Points en attente" value={`${currentPending} pts`} />
-            <StatPill label="Budget restant" value={`${currentRemaining} pts`} />
+            <StatPill label="Solde reel" value={`${currentPointMetrics.balance} pts`} />
+            <StatPill label="Points en attente" value={`${currentPointMetrics.pending} pts`} />
+            <StatPill label="Deja alloues" value={`${currentPointMetrics.allocated} pts`} />
+            <StatPill
+              label="Restant a distribuer"
+              value={`${currentPointMetrics.remaining} pts`}
+            />
           </MetricGrid>
         </SectionCard>
         <SectionCard title="Session">
@@ -1096,14 +1248,13 @@ function formatHistoryTitle(
   goals: ReadonlyArray<FamilyGoal>
 ): string {
   const actor = members.find((member) => member.id === event.actorMemberId)?.displayName;
-  const subject = members.find((member) => member.id === event.subjectMemberId)?.displayName;
   const goalTitle = goals.find((goal) => goal.id === String(event.metadata.goalId))?.title;
 
   switch (event.type) {
     case "member_session_started":
       return `${actor ?? "Un membre"} s'est connecte`;
     case "points_given":
-      return `${actor ?? "Quelqu'un"} a donne ${event.metadata.points} point(s) a ${subject ?? "un membre"}`;
+      return `${actor ?? "Quelqu'un"} a finalise sa repartition de points`;
     case "shop_purchase_made":
       return `${actor ?? "Un membre"} a achete un cadeau`;
     case "goal_vote_recorded":
@@ -1124,7 +1275,9 @@ function formatHistorySubtitle(event: HistoryEvent): string {
     case "goal_vote_recorded":
       return "Vote du jour enregistre.";
     case "points_given":
-      return "Le gain reel sera applique a la fin de la journee.";
+      return typeof event.metadata.dayKey === "string"
+        ? `Repartition finalisee pour la journee du ${event.metadata.dayKey}.`
+        : "Repartition de points finalisee.";
     case "member_session_started":
       return "Session locale demarree sur cet appareil.";
     default:
