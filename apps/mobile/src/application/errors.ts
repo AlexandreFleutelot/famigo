@@ -30,6 +30,35 @@ export function createApplicationError(params: {
   return new ApplicationError(params);
 }
 
+interface SupabaseLikeError {
+  message: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+}
+
+function isSupabaseLikeError(error: unknown): error is SupabaseLikeError {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  return typeof (error as { message?: unknown }).message === "string";
+}
+
+function formatSupabaseLikeError(error: SupabaseLikeError): string {
+  const messageParts = [error.message, error.details, error.hint].filter(
+    (part): part is string => typeof part === "string" && part.trim().length > 0
+  );
+
+  const errorCode = error.code;
+
+  if (errorCode && !messageParts.some((part) => part.includes(errorCode))) {
+    messageParts.push(`Code: ${errorCode}`);
+  }
+
+  return messageParts.join(" ");
+}
+
 export function toApplicationError(error: unknown): ApplicationError {
   if (error instanceof ApplicationError) {
     return error;
@@ -58,6 +87,15 @@ export function toApplicationError(error: unknown): ApplicationError {
       code: "INFRASTRUCTURE_ERROR",
       kind: "infrastructure",
       message: error.message,
+      cause: error,
+    });
+  }
+
+  if (isSupabaseLikeError(error)) {
+    return new ApplicationError({
+      code: error.code ?? "SUPABASE_ERROR",
+      kind: "infrastructure",
+      message: formatSupabaseLikeError(error),
       cause: error,
     });
   }
