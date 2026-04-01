@@ -1,13 +1,17 @@
-import type { Family, FamilyGoal, HistoryEvent, Member } from "@famigo/domain";
+import { sortHistoryEvents, type Family, type FamilyGoal, type HistoryEvent, type Member } from "@famigo/domain";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 
 import type { AppSessionGateway } from "./src/application";
 import {
   createAsyncStorageAppSessionGateway,
+  createBuyRewardUseCase,
+  createCastGoalVoteUseCase,
   createClearSessionUseCase,
   createGetFamiliesUseCase,
   createGetMembersForSelectedFamilyUseCase,
+  createLoadGoalsUseCase,
+  createLoadShopUseCase,
   createLoginWithPinUseCase,
   createRestoreSessionUseCase,
   createSelectFamilyUseCase,
@@ -15,21 +19,15 @@ import {
 } from "./src/application";
 import { verifyMemberPin } from "./src/data/repositories/members.repository";
 import {
-  buyShopItem,
-  createFamilyGoal,
   createInitialMockAppState,
   getAllocatedPointsForReceiver,
   getAllocationForMember,
-  getBalanceForMember,
   getCurrentMember,
-  getGoalVoteCount,
   getPendingPointsForMember,
   getRemainingBudgetForMember,
-  hasMemberVotedToday,
   logout,
   simulateEndOfDay,
   updatePointAllocation,
-  voteForGoal,
 } from "./src/mock-state";
 import {
   AppScreen,
@@ -78,6 +76,10 @@ export default function App() {
       },
     })
   ).current;
+  const loadShop = useRef(createLoadShopUseCase()).current;
+  const buyReward = useRef(createBuyRewardUseCase()).current;
+  const loadGoals = useRef(createLoadGoalsUseCase()).current;
+  const castGoalVote = useRef(createCastGoalVoteUseCase()).current;
   const restoreSession = useRef(
     createRestoreSessionUseCase({ appSessionGateway: appSessionGatewayRef.current })
   ).current;
@@ -95,8 +97,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<MainTab>("home");
   const [message, setMessage] = useState<string | null>(null);
   const [pinInput, setPinInput] = useState("");
-  const [goalTitleInput, setGoalTitleInput] = useState("");
-  const [goalTargetInput, setGoalTargetInput] = useState("3");
+  const [isShopBusy, setIsShopBusy] = useState(false);
+  const [loadedShopSessionKey, setLoadedShopSessionKey] = useState<string | null>(null);
+  const [isGoalsBusy, setIsGoalsBusy] = useState(false);
+  const [loadedGoalsSessionKey, setLoadedGoalsSessionKey] = useState<string | null>(null);
+  const [goalVoteCounts, setGoalVoteCounts] = useState<Record<string, number>>({});
+  const [votedGoalsSessionKey, setVotedGoalsSessionKey] = useState<string | null>(null);
 
   const currentMember = useMemo(() => getCurrentMember(appState), [appState]);
   const selectedFamily =
@@ -107,16 +113,54 @@ export default function App() {
     selectedMemberId === null
       ? null
       : (availableMembers.find((member) => member.id === selectedMemberId) ?? null);
+  const currentSessionKey =
+    currentMember !== null && selectedFamily !== null
+      ? `${selectedFamily.id}:${currentMember.id}`
+      : null;
 
-  const currentBalance = currentMember ? getBalanceForMember(appState, currentMember.id) : 0;
+  const currentBalance = currentMember
+    ? appState.ledgerEntries
+        .filter((entry) => entry.memberId === currentMember.id)
+        .reduce((sum, entry) => sum + entry.pointsDelta, 0)
+    : 0;
   const currentPending = currentMember ? getPendingPointsForMember(appState, currentMember.id) : 0;
   const currentRemaining =
     currentMember !== null ? getRemainingBudgetForMember(appState, currentMember.id) : 0;
-  const hasVotedToday = currentMember ? hasMemberVotedToday(appState, currentMember.id) : false;
+  const hasVotedToday = currentSessionKey !== null && votedGoalsSessionKey === currentSessionKey;
+  const isShopLoaded = currentSessionKey !== null && loadedShopSessionKey === currentSessionKey;
+  const isGoalsLoaded = currentSessionKey !== null && loadedGoalsSessionKey === currentSessionKey;
 
   useEffect(() => {
     void bootstrapSessionFlow();
   }, []);
+
+  useEffect(() => {
+    if (
+      activeTab !== "shop" ||
+      currentMember === null ||
+      selectedFamily === null ||
+      isShopBusy ||
+      isShopLoaded
+    ) {
+      return;
+    }
+
+    void refreshShopData(selectedFamily.id, currentMember.id);
+  }, [activeTab, currentMember, selectedFamily, isShopBusy, isShopLoaded]);
+
+  useEffect(() => {
+    if (
+      activeTab !== "goals" ||
+      currentMember === null ||
+      selectedFamily === null ||
+      isGoalsBusy ||
+      isGoalsLoaded
+    ) {
+      return;
+    }
+
+    void refreshGoalsData(selectedFamily.id, currentMember.id);
+  }, [activeTab, currentMember, selectedFamily, isGoalsBusy, isGoalsLoaded]);
 
   function applyMutation(
     next: { state: typeof appState; errorMessage?: string },
@@ -145,6 +189,199 @@ export default function App() {
               startedAt,
             },
     }));
+  }
+
+  async function refreshShopData(
+    familyId: string,
+    memberId: string,
+    successMessage?: string
+  ): Promise<boolean> {
+    setIsShopBusy(true);
+
+    const loadShopResult = await loadShop({ familyId, memberId });
+
+    if (!loadShopResult.ok) {
+      setIsShopBusy(false);
+      setMessage(loadShopResult.error.message);
+      return false;
+    }
+
+    setAppState((previous) => ({
+      ...previous,
+      shopItems: [...loadShopResult.data.items],
+      ledgerEntries: [...loadShopResult.data.ledgerEntries],
+    }));
+    setLoadedShopSessionKey(`${familyId}:${memberId}`);
+    setIsShopBusy(false);
+    setMessage(successMessage ?? null);
+
+    return true;
+  }
+
+  async function handleShopPurchase(rewardId: string) {
+    if (selectedFamily === null || currentMember === null) {
+      return;
+    }
+
+    setIsShopBusy(true);
+    setMessage(null);
+
+    const buyRewardResult = await buyReward({
+      familyId: selectedFamily.id,
+      memberId: currentMember.id,
+      rewardId,
+      purchasedAt: new Date().toISOString(),
+    });
+
+    if (!buyRewardResult.ok) {
+      setIsShopBusy(false);
+      setMessage(buyRewardResult.error.message);
+      return;
+    }
+
+    setAppState((previous) => ({
+      ...previous,
+      ledgerEntries: [
+        ...previous.ledgerEntries.filter(
+          (entry) => entry.id !== buyRewardResult.data.pointTransactionId
+        ),
+        {
+          id: buyRewardResult.data.pointTransactionId,
+          familyId: selectedFamily.id,
+          memberId: currentMember.id,
+          type: "shop_purchase",
+          pointsDelta: -buyRewardResult.data.item.cost,
+          occurredAt: buyRewardResult.data.purchasedAt,
+          referenceId: buyRewardResult.data.purchaseId,
+        },
+      ],
+      historyEvents: sortHistoryEvents([
+        ...previous.historyEvents.filter(
+          (event) => event.id !== buyRewardResult.data.auditEventId
+        ),
+        {
+          id: buyRewardResult.data.auditEventId,
+          familyId: selectedFamily.id,
+          type: "shop_purchase_made",
+          occurredAt: buyRewardResult.data.purchasedAt,
+          actorMemberId: currentMember.id,
+          metadata: {
+            purchaseId: buyRewardResult.data.purchaseId,
+            rewardId: buyRewardResult.data.item.id,
+            rewardName: buyRewardResult.data.item.name,
+            cost: buyRewardResult.data.item.cost,
+          },
+        },
+      ]),
+    }));
+
+    await refreshShopData(
+      selectedFamily.id,
+      currentMember.id,
+      `${buyRewardResult.data.item.name} achete avec succes.`
+    );
+  }
+
+  async function refreshGoalsData(
+    familyId: string,
+    memberId: string,
+    successMessage?: string
+  ): Promise<boolean> {
+    setIsGoalsBusy(true);
+
+    const loadGoalsResult = await loadGoals({ familyId });
+
+    if (!loadGoalsResult.ok) {
+      setIsGoalsBusy(false);
+      setMessage(loadGoalsResult.error.message);
+      return false;
+    }
+
+    setAppState((previous) => ({
+      ...previous,
+      goals: [...loadGoalsResult.data.goals],
+    }));
+    setGoalVoteCounts({});
+    setLoadedGoalsSessionKey(`${familyId}:${memberId}`);
+    setIsGoalsBusy(false);
+    setMessage(successMessage ?? null);
+
+    return true;
+  }
+
+  async function handleGoalVote(goalId: string) {
+    if (selectedFamily === null || currentMember === null) {
+      return;
+    }
+
+    setIsGoalsBusy(true);
+    setMessage(null);
+
+    const createdAt = new Date().toISOString();
+    const castGoalVoteResult = await castGoalVote({
+      familyId: selectedFamily.id,
+      memberId: currentMember.id,
+      goalId,
+      dayKey: appState.currentDayKey,
+      createdAt,
+    });
+
+    if (!castGoalVoteResult.ok) {
+      setIsGoalsBusy(false);
+      setMessage(castGoalVoteResult.error.message);
+      return;
+    }
+
+    setAppState((previous) => ({
+      ...previous,
+      goals: previous.goals.map((candidate) =>
+        candidate.id === castGoalVoteResult.data.goal.id ? castGoalVoteResult.data.goal : candidate
+      ),
+      historyEvents: sortHistoryEvents([
+        ...previous.historyEvents.filter(
+          (event) =>
+            event.id !== castGoalVoteResult.data.voteAuditEventId &&
+            event.id !== castGoalVoteResult.data.goalReachedAuditEventId
+        ),
+        {
+          id: castGoalVoteResult.data.voteAuditEventId,
+          familyId: selectedFamily.id,
+          type: "goal_vote_recorded",
+          occurredAt: createdAt,
+          actorMemberId: currentMember.id,
+          metadata: {
+            goalId,
+            dayKey: appState.currentDayKey,
+          },
+        },
+        ...(castGoalVoteResult.data.goalReachedAuditEventId === null
+          ? []
+          : [
+              {
+                id: castGoalVoteResult.data.goalReachedAuditEventId,
+                familyId: selectedFamily.id,
+                type: "goal_reached" as const,
+                occurredAt: createdAt,
+                actorMemberId: currentMember.id,
+                metadata: {
+                  goalId,
+                  targetVoteCount: castGoalVoteResult.data.goal.targetVoteCount,
+                },
+              },
+            ]),
+      ]),
+    }));
+    setGoalVoteCounts((previous) => ({
+      ...previous,
+      [goalId]: castGoalVoteResult.data.totalVotes,
+    }));
+    setVotedGoalsSessionKey(currentSessionKey);
+    setIsGoalsBusy(false);
+    setMessage(
+      castGoalVoteResult.data.reachedTarget
+        ? "Vote enregistre. Objectif atteint."
+        : "Vote enregistre."
+    );
   }
 
   async function bootstrapSessionFlow() {
@@ -341,6 +578,10 @@ export default function App() {
     setAvailableMembers([]);
     setSelectedFamilyId(null);
     setSelectedMemberId(null);
+    setLoadedShopSessionKey(null);
+    setLoadedGoalsSessionKey(null);
+    setGoalVoteCounts({});
+    setVotedGoalsSessionKey(null);
     setPinInput("");
     setAuthStage("family");
     setActiveTab("home");
@@ -588,20 +829,27 @@ export default function App() {
         <SectionCard title="Mon solde disponible">
           <StatPill label="Solde reel" value={`${currentBalance} pts`} />
         </SectionCard>
+        {!isShopLoaded ? (
+          <SectionCard subtitle={isShopBusy ? "Chargement de la boutique..." : "Ouverture de la boutique..."} />
+        ) : null}
         {appState.shopItems.map((item) => (
           <SectionCard key={item.id} title={item.name} subtitle={`Cout : ${item.cost} points`}>
             <PrimaryButton
-              label={currentBalance >= item.cost ? "Acheter" : "Solde insuffisant"}
-              onPress={() =>
-                applyMutation(
-                  buyShopItem(appState, member.id, item.id, new Date().toISOString()),
-                  `${item.name} achete avec succes.`
-                )
+              label={
+                isShopBusy
+                  ? "Traitement..."
+                  : currentBalance >= item.cost
+                    ? "Acheter"
+                    : "Solde insuffisant"
               }
-              disabled={currentBalance < item.cost}
+              onPress={() => void handleShopPurchase(item.id)}
+              disabled={currentBalance < item.cost || isShopBusy}
             />
           </SectionCard>
         ))}
+        {isShopLoaded && appState.shopItems.length === 0 ? (
+          <SectionCard subtitle="Aucun cadeau disponible pour cette famille." />
+        ) : null}
       </AppScreen>
     );
   }
@@ -612,41 +860,14 @@ export default function App() {
     return (
       <AppScreen title="Objectifs famille" subtitle="Un seul vote par jour et par membre.">
         {isParent ? (
-          <SectionCard title="Creer un objectif">
-            <InlineField
-              value={goalTitleInput}
-              onChangeText={setGoalTitleInput}
-              placeholder="Titre de l'objectif"
-            />
-            <InlineField
-              value={goalTargetInput}
-              onChangeText={setGoalTargetInput}
-              placeholder="Cible de votes"
-              keyboardType="number-pad"
-            />
-            <PrimaryButton
-              label="Ajouter l'objectif"
-              onPress={() => {
-                const targetVoteCount = Number(goalTargetInput);
-                const result = createFamilyGoal(
-                  appState,
-                  member.id,
-                  goalTitleInput.trim(),
-                  Number.isFinite(targetVoteCount) ? targetVoteCount : 0
-                );
-
-                applyMutation(result, "Objectif ajoute.");
-                if (!result.errorMessage) {
-                  setGoalTitleInput("");
-                  setGoalTargetInput("3");
-                }
-              }}
-              disabled={goalTitleInput.trim().length === 0}
-            />
-          </SectionCard>
+          <SectionCard subtitle="La creation d'objectif n'est pas encore branchee dans cette tranche." />
+        ) : null}
+        {!isGoalsLoaded ? (
+          <SectionCard subtitle={isGoalsBusy ? "Chargement des objectifs..." : "Ouverture des objectifs..."} />
         ) : null}
         {appState.goals.map((goal) => {
-          const voteCount = getGoalVoteCount(appState, goal.id);
+          const voteCount =
+            goalVoteCounts[goal.id] ?? (goal.status === "promised" ? goal.targetVoteCount : 0);
           const progress = voteCount / goal.targetVoteCount;
           const canVote = !hasVotedToday && goal.status === "active";
 
@@ -665,17 +886,15 @@ export default function App() {
                       ? "Vote deja utilise aujourd'hui"
                       : "Voter pour cet objectif"
                 }
-                onPress={() =>
-                  applyMutation(
-                    voteForGoal(appState, member.id, goal.id, new Date().toISOString()),
-                    "Vote enregistre."
-                  )
-                }
-                disabled={!canVote}
+                onPress={() => void handleGoalVote(goal.id)}
+                disabled={!canVote || isGoalsBusy}
               />
             </SectionCard>
           );
         })}
+        {isGoalsLoaded && appState.goals.length === 0 ? (
+          <SectionCard subtitle="Aucun objectif disponible pour cette famille." />
+        ) : null}
       </AppScreen>
     );
   }
