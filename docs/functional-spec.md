@@ -38,14 +38,16 @@ Elle ne couvre pas l'administration web, la monetisation ni les fonctionnalites 
 ### 4.1 Parcours
 
 1. L'utilisateur ouvre l'application.
-2. Il choisit un profil dans un carousel de membres de la famille.
-3. Il saisit le PIN a 4 chiffres associe a ce profil.
-4. Si le PIN est valide, la session du membre est ouverte.
+2. Il choisit une famille parmi les familles disponibles pour l'appareil ou le contexte courant.
+3. Il choisit un profil dans un carousel de membres de cette famille.
+4. Il saisit le PIN a 4 chiffres associe a ce profil.
+5. Si le PIN est valide, la session du membre est ouverte.
 
 ### 4.2 Regles
 
 - Le login n'exige pas d'email.
 - Le login n'exige pas de mot de passe alphanumerique.
+- Le choix de la famille precede toujours le choix du membre.
 - Le PIN contient exactement 4 chiffres.
 - Le choix du membre precede toujours la saisie du PIN.
 - La verification concrete du PIN doit se faire a partir d'un secret derive ou hash cote infrastructure, pas d'un PIN stocke en clair.
@@ -54,6 +56,7 @@ Elle ne couvre pas l'administration web, la monetisation ni les fonctionnalites 
 
 - Si le PIN est invalide, l'acces est refuse.
 - Si le profil n'appartient pas a la famille de l'appareil ou du contexte courant, l'acces est refuse.
+- Si aucune famille n'est encore selectionnee, l'application doit rester sur l'etape de choix de famille.
 
 ## 5. Attribution de points
 
@@ -184,4 +187,5 @@ Les champs exacts du profil ne sont pas entierement definis dans ce document.
 - La definition exacte de "fin de journee" dependra du fuseau horaire ou du parametre de famille retenu en implementation.
 - Le comportement de reallocation apres un achat le meme jour devra etre verifie techniquement si le solde visible inclut ou non les gains en attente.
 - Le mode de gestion initiale des profils membres n'est pas specifie dans la v1.
+- En premiere iteration UI, la session mobile peut etre limitee a un contexte simple `selectedFamilyId + selectedMemberId` avant branchement complet de l'auth PIN.
 - Le remplacement complet du mock state par des flux applicatifs reels est encore progressif.

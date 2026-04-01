@@ -22,6 +22,12 @@ La couche est organisee en quatre blocs :
 
 Fichiers actuellement poses :
 
+- `use-cases/get-families.ts`
+- `use-cases/select-family.ts`
+- `use-cases/get-members-for-selected-family.ts`
+- `use-cases/start-member-session.ts`
+- `use-cases/restore-session.ts`
+- `use-cases/clear-session.ts`
 - `use-cases/login-with-pin.ts`
 - `use-cases/load-shop.ts`
 - `use-cases/buy-reward.ts`
@@ -29,10 +35,12 @@ Fichiers actuellement poses :
 - `use-cases/cast-goal-vote.ts`
 - `adapters/supabase-gateways.ts`
 - `mappers/member.mapper.ts`
+- `mappers/family.mapper.ts`
 - `mappers/shop.mapper.ts`
 - `mappers/goals.mapper.ts`
 - `errors.ts`
 - `result.ts`
+- `session.ts`
 
 ## 3. Responsabilites
 
@@ -67,7 +75,58 @@ Ils permettent de :
 
 ## 4. Use cases actuellement disponibles
 
-### 4.1 `loginWithPin`
+### 4.1 `getFamilies`
+
+Responsabilites :
+
+- lister les familles disponibles ;
+- fournir a l'UI un premier point d'entree explicite multi-famille.
+
+### 4.2 `selectFamily`
+
+Responsabilites :
+
+- verifier que la famille existe ;
+- enregistrer un contexte applicatif minimal avec `selectedFamilyId` ;
+- reinitialiser `selectedMemberId` tant qu'aucun membre n'est encore choisi.
+
+### 4.3 `getMembersForSelectedFamily`
+
+Responsabilites :
+
+- relire la famille actuellement selectionnee ;
+- charger uniquement les membres de cette famille ;
+- eviter de demander a l'UI de repasser le `familyId` partout.
+
+### 4.4 `startMemberSession`
+
+Responsabilites :
+
+- verifier qu'une famille est bien selectionnee ;
+- verifier que le membre choisi appartient a cette famille ;
+- enregistrer un contexte applicatif minimal avec `selectedFamilyId + selectedMemberId`.
+
+Hypothese explicite :
+
+- pour cette tranche, `startMemberSession` ne verifie pas encore le PIN ;
+- la vraie auth PIN reste dans `loginWithPin` et sera rebranchee plus tard dans le flow complet.
+
+### 4.5 `restoreSession`
+
+Responsabilites :
+
+- relire le contexte applicatif stocke ;
+- normaliser la session si la famille ou le membre n'existe plus ;
+- permettre a l'UI de redemarrer sur le bon ecran sans logique de reconciliation locale.
+
+### 4.6 `clearSession`
+
+Responsabilites :
+
+- vider le contexte applicatif minimal ;
+- preparer une sortie de session simple cote UI.
+
+### 4.7 `loginWithPin`
 
 Responsabilites :
 
@@ -82,7 +141,7 @@ Point d'attention :
 - le schema stocke `pin_hash`, alors que le domaine historique manipule encore un `pin` clair dans certains mocks ;
 - la couche applicative sert donc de pont temporaire et rend cette divergence explicite.
 
-### 4.2 `loadShop`
+### 4.8 `loadShop`
 
 Responsabilites :
 
@@ -90,7 +149,7 @@ Responsabilites :
 - charger les mouvements de points du membre ;
 - recalculer le solde visible a partir du ledger.
 
-### 4.3 `buyReward`
+### 4.9 `buyReward`
 
 Responsabilites :
 
@@ -99,14 +158,14 @@ Responsabilites :
 - deleguer l'ecriture finale atomique a la RPC `purchase_reward` ;
 - renvoyer un recu d'achat exploitable par l'UI.
 
-### 4.4 `loadGoals`
+### 4.10 `loadGoals`
 
 Responsabilites :
 
 - charger les objectifs actifs ou promis ;
 - renvoyer des objets directement conformes au domaine.
 
-### 4.5 `castGoalVote`
+### 4.11 `castGoalVote`
 
 Responsabilites :
 
@@ -120,6 +179,7 @@ Responsabilites :
 - ne pas disperser les mappers dans plusieurs couches ;
 - ne pas faire dependre `packages/domain` de Supabase ;
 - garder des use cases centres sur des intentions produit ;
+- garder le contexte de navigation/session mobile dans une couche applicative simple, pas dans le domaine ;
 - documenter explicitement les ecarts temporaires entre domaine TS et SQL.
 
 ## 6. Limites actuelles
@@ -127,11 +187,14 @@ Responsabilites :
 - l'UI principale utilise encore largement le mock state ;
 - la strategie de cache et de refresh n'est pas encore definie ;
 - `dayKey` n'est pas encore fourni par un service unique partage ;
-- les slices `daily points` et `members + session` ne sont pas encore branches de bout en bout.
+- `members + session` est maintenant prepare cote application, mais l'UI n'est pas encore refondue pour consommer tout le flow ;
+- la persistance reelle du contexte mobile reste a brancher sur un storage adapte a React Native ;
+- les slices `daily points` ne sont pas encore branches de bout en bout.
 
 ## 7. Etapes logiques suivantes
 
-- brancher le slice vertical `members + session` sur cette couche ;
+- brancher l'UI de selection famille puis membres sur ces nouveaux use cases ;
+- reconnecter ensuite la veritable auth PIN sur le membre deja selectionne ;
 - basculer ensuite `shop` vers les vrais use cases ;
 - brancher `goals` ;
 - poser la meme approche pour `daily points` avec un calcul unique de `dayKey`.

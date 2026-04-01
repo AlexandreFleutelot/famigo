@@ -61,9 +61,13 @@ Etat :
 
 Etat :
 
+- use cases `getFamilies`, `selectFamily`, `getMembersForSelectedFamily`, `startMemberSession`, `restoreSession` et `clearSession` disponibles ;
+- introduction d'un contexte applicatif minimal `selectedFamilyId + selectedMemberId` ;
+- listing multi-famille prepare cote application ;
+- adapter de session memoire disponible pour tests et branchement initial ;
 - use case `loginWithPin` disponible ;
-- verification delegatee a un `PinVerifier` abstrait ;
-- UI reelle non encore branchee.
+- verification PIN toujours delegatee a un `PinVerifier` abstrait ;
+- UI reelle non encore branchee de bout en bout.
 
 ### 3.4 Daily points
 
@@ -77,6 +81,12 @@ Etat :
 
 Des tests de couche applicative existent pour :
 
+- `getFamilies` ;
+- `selectFamily` ;
+- `getMembersForSelectedFamily` ;
+- `startMemberSession` ;
+- `restoreSession` ;
+- `clearSession` ;
 - `loadShop` ;
 - `buyReward` ;
 - `loginWithPin` ;
@@ -87,6 +97,7 @@ Ils couvrent l'orchestration et les contrats, pas encore l'integration UI.
 ## 5. Points d'attention ouverts
 
 - mismatch temporaire entre `pin_hash` en base et `pin` dans une partie du domaine ;
+- la persistance definitive de la session mobile n'est pas encore branchee sur un storage React Native ;
 - coexistence provisoire entre validations domaine TypeScript et executions atomiques SQL ;
 - absence de strategie de cache mobile explicite ;
 - absence d'un service unique pour le calcul de `dayKey`.
@@ -95,7 +106,9 @@ Ils couvrent l'orchestration et les contrats, pas encore l'integration UI.
 
 La prochaine etape la plus rentable est de brancher un premier flux UI reel sur la couche `application`, en commencant par :
 
+- liste des familles ;
 - selection d'un membre ;
-- saisie du PIN ;
-- ouverture de session ;
+- carousel des membres de la famille selectionnee ;
+- restauration du contexte famille/membre au redemarrage ;
+- saisie du PIN sur le membre deja choisi ;
 - chargement initial des donnees du membre connecte.

@@ -17,7 +17,7 @@ Elles completent `AGENTS.md` avec un cadrage produit v1 plus explicite.
 
 ### 3.1 Authentification
 
-- Le login v1 repose sur un carousel de profils puis un PIN a 4 chiffres.
+- Le flow v1 commence par le choix d'une famille, puis un carousel de profils, puis un PIN a 4 chiffres.
 - Aucun email n'est obligatoire.
 - Un membre peut se connecter depuis n'importe quel appareil lie a sa famille.
 
@@ -61,6 +61,7 @@ Elles completent `AGENTS.md` avec un cadrage produit v1 plus explicite.
 - Garder la logique metier hors des composants UI.
 - Favoriser `packages/domain` pour les regles pures.
 - Ne pas coupler le domaine a Supabase ni a React Native.
+- Pour la selection famille/membre mobile, preferer un contexte applicatif minimal plutot qu'un systeme de session generique.
 - Preferer des slices verticales simples.
 - Eviter les abstractions generiques inutiles.
 
