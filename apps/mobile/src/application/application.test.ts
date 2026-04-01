@@ -9,9 +9,11 @@ import { createCastGoalVoteUseCase } from "./use-cases/cast-goal-vote";
 import { createClearSessionUseCase } from "./use-cases/clear-session";
 import { createGetFamiliesUseCase } from "./use-cases/get-families";
 import { createGetMembersForSelectedFamilyUseCase } from "./use-cases/get-members-for-selected-family";
+import { createLoadDailyPointsUseCase } from "./use-cases/load-daily-points";
 import { createLoadShopUseCase } from "./use-cases/load-shop";
 import { createLoginWithPinUseCase, type PinVerifier } from "./use-cases/login-with-pin";
 import { createRestoreSessionUseCase } from "./use-cases/restore-session";
+import { createSaveDailyPointsUseCase } from "./use-cases/save-daily-points";
 import { createSelectFamilyUseCase } from "./use-cases/select-family";
 import { createStartMemberSessionUseCase } from "./use-cases/start-member-session";
 
@@ -219,6 +221,104 @@ describe("application use cases", () => {
           },
         ],
         balance: 5,
+      },
+    });
+  });
+
+  it("loads the current daily allocation for the connected member", async () => {
+    const member: Member = {
+      id: memberId,
+      familyId,
+      displayName: "Alice",
+      role: "parent",
+      pin: "",
+    };
+    const sibling: Member = {
+      id: "member-2",
+      familyId,
+      displayName: "Bob",
+      role: "child",
+      pin: "",
+    };
+    const getFamilyMembers = vi.fn(async (): Promise<ReadonlyArray<Member>> => [member, sibling]);
+    const getDailyAllocationForMember = vi.fn(async () => ({
+      id: "allocation-1",
+      familyId,
+      dayKey: "2026-03-31",
+      giverMemberId: memberId,
+      status: "draft" as const,
+      lines: [{ receiverMemberId: "member-2", points: 3 }],
+    }));
+
+    const loadDailyPoints = createLoadDailyPointsUseCase({
+      getFamilyMembers,
+      getDailyAllocationForMember,
+    });
+    const result = await loadDailyPoints({
+      familyId,
+      memberId,
+      dayKey: "2026-03-31",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        allocation: {
+          id: "allocation-1",
+          familyId,
+          dayKey: "2026-03-31",
+          giverMemberId: memberId,
+          status: "draft",
+          lines: [{ receiverMemberId: "member-2", points: 3 }],
+        },
+        members: [member, sibling],
+        allocatedPoints: 3,
+        remainingPoints: 2,
+      },
+    });
+  });
+
+  it("saves a daily point draft with domain validation before persistence", async () => {
+    const getDailyAllocationForMember = vi.fn(async () => null);
+    const saveDailyAllocationDraft = vi.fn(async () => ({
+      id: "allocation-1",
+      familyId,
+      dayKey: "2026-03-31",
+      giverMemberId: memberId,
+      status: "draft" as const,
+      lines: [{ receiverMemberId: "member-2", points: 4 }],
+    }));
+
+    const saveDailyPoints = createSaveDailyPointsUseCase({
+      getDailyAllocationForMember,
+      saveDailyAllocationDraft,
+    });
+    const result = await saveDailyPoints({
+      familyId,
+      memberId,
+      dayKey: "2026-03-31",
+      lines: [{ receiverMemberId: "member-2", points: 4 }],
+    });
+
+    expect(saveDailyAllocationDraft).toHaveBeenCalledWith({
+      familyId,
+      giverMemberId: memberId,
+      dayKey: "2026-03-31",
+      lines: [{ receiverMemberId: "member-2", points: 4 }],
+    });
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        allocation: {
+          id: "allocation-1",
+          familyId,
+          dayKey: "2026-03-31",
+          giverMemberId: memberId,
+          status: "draft",
+          lines: [{ receiverMemberId: "member-2", points: 4 }],
+        },
+        allocatedPoints: 4,
+        remainingPoints: 1,
       },
     });
   });

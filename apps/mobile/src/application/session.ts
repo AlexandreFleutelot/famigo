@@ -1,5 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
 export interface AppSessionContext {
   selectedFamilyId: string | null;
   selectedMemberId: string | null;
@@ -17,6 +15,15 @@ export const EMPTY_APP_SESSION_CONTEXT: AppSessionContext = {
 };
 
 const APP_SESSION_STORAGE_KEY = "famigo/app-session";
+
+let asyncStorageModulePromise: Promise<typeof import("@react-native-async-storage/async-storage")> | null =
+  null;
+
+async function getAsyncStorage() {
+  asyncStorageModulePromise ??= import("@react-native-async-storage/async-storage");
+  const module = await asyncStorageModulePromise;
+  return module.default;
+}
 
 export function createMemoryAppSessionGateway(
   initialSession: AppSessionContext | null = null
@@ -56,7 +63,8 @@ function isAppSessionContext(value: unknown): value is AppSessionContext {
 export function createAsyncStorageAppSessionGateway(): AppSessionGateway {
   return {
     async read() {
-      const serializedSession = await AsyncStorage.getItem(APP_SESSION_STORAGE_KEY);
+      const asyncStorage = await getAsyncStorage();
+      const serializedSession = await asyncStorage.getItem(APP_SESSION_STORAGE_KEY);
 
       if (serializedSession === null) {
         return null;
@@ -66,23 +74,25 @@ export function createAsyncStorageAppSessionGateway(): AppSessionGateway {
         const parsedSession = JSON.parse(serializedSession);
 
         if (!isAppSessionContext(parsedSession)) {
-          await AsyncStorage.removeItem(APP_SESSION_STORAGE_KEY);
+          await asyncStorage.removeItem(APP_SESSION_STORAGE_KEY);
           return null;
         }
 
         return parsedSession;
       } catch {
-        await AsyncStorage.removeItem(APP_SESSION_STORAGE_KEY);
+        await asyncStorage.removeItem(APP_SESSION_STORAGE_KEY);
         return null;
       }
     },
 
     async save(session) {
-      await AsyncStorage.setItem(APP_SESSION_STORAGE_KEY, JSON.stringify(session));
+      const asyncStorage = await getAsyncStorage();
+      await asyncStorage.setItem(APP_SESSION_STORAGE_KEY, JSON.stringify(session));
     },
 
     async clear() {
-      await AsyncStorage.removeItem(APP_SESSION_STORAGE_KEY);
+      const asyncStorage = await getAsyncStorage();
+      await asyncStorage.removeItem(APP_SESSION_STORAGE_KEY);
     },
   };
 }
