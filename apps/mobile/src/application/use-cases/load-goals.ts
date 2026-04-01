@@ -1,6 +1,6 @@
 import type { FamilyGoal } from "@famigo/domain";
 
-import type { GoalsGateway } from "../ports";
+import { getActiveGoals as getActiveGoalsRepository } from "../../data/repositories/goals.repository";
 import { executeUseCase, type UseCaseResult } from "../result";
 
 export interface LoadGoalsInput {
@@ -12,12 +12,14 @@ export interface LoadGoalsData {
 }
 
 export interface LoadGoalsDependencies {
-  goalsGateway: GoalsGateway;
+  getActiveGoals?: typeof getActiveGoalsRepository;
 }
 
-export function createLoadGoalsUseCase(dependencies: LoadGoalsDependencies) {
+export function createLoadGoalsUseCase(dependencies: LoadGoalsDependencies = {}) {
+  const { getActiveGoals = getActiveGoalsRepository } = dependencies;
+
   return (input: LoadGoalsInput): Promise<UseCaseResult<LoadGoalsData>> =>
     executeUseCase(async () => ({
-      goals: await dependencies.goalsGateway.listGoals(input.familyId),
+      goals: await getActiveGoals(input.familyId),
     }));
 }

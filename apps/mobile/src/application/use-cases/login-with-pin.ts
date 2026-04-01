@@ -1,7 +1,7 @@
 import type { HistoryEvent, SessionContext } from "@famigo/domain";
 
+import { getMemberAuthById as getMemberAuthByIdRepository } from "../../data/repositories/members.repository";
 import { createApplicationError } from "../errors";
-import type { MembersGateway, PinVerifier } from "../ports";
 import { executeUseCase, type UseCaseResult } from "../result";
 
 export interface LoginWithPinInput {
@@ -17,12 +17,18 @@ export interface LoginWithPinData {
   historyEvent: HistoryEvent;
 }
 
+export interface PinVerifier {
+  verify(input: { pin: string; pinHash: string }): Promise<boolean>;
+}
+
 export interface LoginWithPinDependencies {
-  membersGateway: MembersGateway;
   pinVerifier: PinVerifier;
+  getMemberAuthById?: typeof getMemberAuthByIdRepository;
 }
 
 export function createLoginWithPinUseCase(dependencies: LoginWithPinDependencies) {
+  const { pinVerifier, getMemberAuthById = getMemberAuthByIdRepository } = dependencies;
+
   return (input: LoginWithPinInput): Promise<UseCaseResult<LoginWithPinData>> =>
     executeUseCase(async () => {
       if (!/^\d{4}$/.test(input.pin)) {
@@ -33,7 +39,7 @@ export function createLoginWithPinUseCase(dependencies: LoginWithPinDependencies
         });
       }
 
-      const member = await dependencies.membersGateway.getMemberAuthSnapshot(input.memberId);
+      const member = await getMemberAuthById(input.memberId);
 
       if (member === null) {
         throw createApplicationError({
@@ -52,7 +58,7 @@ export function createLoginWithPinUseCase(dependencies: LoginWithPinDependencies
       }
 
       // Temporary bridge: the database stores `pin_hash`, while the domain auth model still expects a clear PIN.
-      const isValidPin = await dependencies.pinVerifier.verify({
+      const isValidPin = await pinVerifier.verify({
         pin: input.pin,
         pinHash: member.pinHash,
       });

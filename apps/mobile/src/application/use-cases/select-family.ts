@@ -1,9 +1,9 @@
 import type { Family } from "@famigo/domain";
 
+import { getFamilyById as getFamilyByIdRepository } from "../../data/repositories/families.repository";
 import { createApplicationError } from "../errors";
-import type { AppSessionGateway, FamiliesGateway } from "../ports";
 import { executeUseCase, type UseCaseResult } from "../result";
-import type { AppSessionContext } from "../session";
+import type { AppSessionContext, AppSessionGateway } from "../session";
 
 export interface SelectFamilyInput {
   familyId: string;
@@ -15,14 +15,16 @@ export interface SelectFamilyData {
 }
 
 export interface SelectFamilyDependencies {
-  familiesGateway: FamiliesGateway;
   appSessionGateway: AppSessionGateway;
+  getFamilyById?: typeof getFamilyByIdRepository;
 }
 
 export function createSelectFamilyUseCase(dependencies: SelectFamilyDependencies) {
+  const { appSessionGateway, getFamilyById = getFamilyByIdRepository } = dependencies;
+
   return (input: SelectFamilyInput): Promise<UseCaseResult<SelectFamilyData>> =>
     executeUseCase(async () => {
-      const family = await dependencies.familiesGateway.getFamilyById(input.familyId);
+      const family = await getFamilyById(input.familyId);
 
       if (family === null) {
         throw createApplicationError({
@@ -37,7 +39,7 @@ export function createSelectFamilyUseCase(dependencies: SelectFamilyDependencies
         selectedMemberId: null,
       };
 
-      await dependencies.appSessionGateway.save(session);
+      await appSessionGateway.save(session);
 
       return {
         family,

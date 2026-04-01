@@ -1,7 +1,10 @@
 import type { FamilyGoal } from "@famigo/domain";
 
+import {
+  castVote as castVoteRepository,
+  getActiveGoals as getActiveGoalsRepository,
+} from "../../data/repositories/goals.repository";
 import { createApplicationError } from "../errors";
-import type { GoalsGateway } from "../ports";
 import { executeUseCase, type UseCaseResult } from "../result";
 
 export interface CastGoalVoteInput {
@@ -22,13 +25,19 @@ export interface CastGoalVoteData {
 }
 
 export interface CastGoalVoteDependencies {
-  goalsGateway: GoalsGateway;
+  getActiveGoals?: typeof getActiveGoalsRepository;
+  castVote?: typeof castVoteRepository;
 }
 
-export function createCastGoalVoteUseCase(dependencies: CastGoalVoteDependencies) {
+export function createCastGoalVoteUseCase(dependencies: CastGoalVoteDependencies = {}) {
+  const {
+    getActiveGoals = getActiveGoalsRepository,
+    castVote = castVoteRepository,
+  } = dependencies;
+
   return (input: CastGoalVoteInput): Promise<UseCaseResult<CastGoalVoteData>> =>
     executeUseCase(async () => {
-      const goals = await dependencies.goalsGateway.listGoals(input.familyId);
+      const goals = await getActiveGoals(input.familyId);
       const goal = goals.find((candidate) => candidate.id === input.goalId);
 
       if (goal === undefined) {
@@ -39,7 +48,7 @@ export function createCastGoalVoteUseCase(dependencies: CastGoalVoteDependencies
         });
       }
 
-      const receipt = await dependencies.goalsGateway.castGoalVote({
+      const receipt = await castVote({
         familyId: input.familyId,
         memberId: input.memberId,
         goalId: input.goalId,

@@ -1,8 +1,9 @@
 import type { Family, Member } from "@famigo/domain";
 
-import type { AppSessionGateway, FamiliesGateway, MembersGateway } from "../ports";
+import { getFamilyById as getFamilyByIdRepository } from "../../data/repositories/families.repository";
+import { getMemberById as getMemberByIdRepository } from "../../data/repositories/members.repository";
 import { executeUseCase, type UseCaseResult } from "../result";
-import type { AppSessionContext } from "../session";
+import type { AppSessionContext, AppSessionGateway } from "../session";
 
 export interface RestoreSessionData {
   family: Family | null;
@@ -11,15 +12,21 @@ export interface RestoreSessionData {
 }
 
 export interface RestoreSessionDependencies {
-  familiesGateway: FamiliesGateway;
-  membersGateway: MembersGateway;
   appSessionGateway: AppSessionGateway;
+  getFamilyById?: typeof getFamilyByIdRepository;
+  getMemberById?: typeof getMemberByIdRepository;
 }
 
 export function createRestoreSessionUseCase(dependencies: RestoreSessionDependencies) {
+  const {
+    appSessionGateway,
+    getFamilyById = getFamilyByIdRepository,
+    getMemberById = getMemberByIdRepository,
+  } = dependencies;
+
   return (): Promise<UseCaseResult<RestoreSessionData>> =>
     executeUseCase(async () => {
-      const storedSession = await dependencies.appSessionGateway.read();
+      const storedSession = await appSessionGateway.read();
 
       if (storedSession === null || storedSession.selectedFamilyId === null) {
         return {
@@ -29,12 +36,10 @@ export function createRestoreSessionUseCase(dependencies: RestoreSessionDependen
         };
       }
 
-      const family = await dependencies.familiesGateway.getFamilyById(
-        storedSession.selectedFamilyId
-      );
+      const family = await getFamilyById(storedSession.selectedFamilyId);
 
       if (family === null) {
-        await dependencies.appSessionGateway.clear();
+        await appSessionGateway.clear();
 
         return {
           family: null,
@@ -51,10 +56,9 @@ export function createRestoreSessionUseCase(dependencies: RestoreSessionDependen
         };
       }
 
-      const members = await dependencies.membersGateway.listFamilyMembers(family.id);
-      const member = members.find((candidate) => candidate.id === storedSession.selectedMemberId);
+      const member = await getMemberById(storedSession.selectedMemberId);
 
-      if (member !== undefined) {
+      if (member !== null && member.familyId === family.id) {
         return {
           family,
           member,
@@ -67,7 +71,7 @@ export function createRestoreSessionUseCase(dependencies: RestoreSessionDependen
         selectedMemberId: null,
       };
 
-      await dependencies.appSessionGateway.save(normalizedSession);
+      await appSessionGateway.save(normalizedSession);
 
       return {
         family,

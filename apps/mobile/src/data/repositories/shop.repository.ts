@@ -1,7 +1,10 @@
+import type { ShopItem } from "@famigo/domain";
+
 import { supabase } from "../supabase/client";
 
-export interface RewardRecord {
+interface RewardRow {
   id: string;
+  family_id: string;
   name: string;
   image_url: string;
   cost: number;
@@ -15,7 +18,7 @@ export interface PurchaseRewardInput {
   purchasedAt?: string;
 }
 
-export interface PurchaseRewardResult {
+export interface PurchaseRewardReceipt {
   purchaseId: string;
   pointTransactionId: string;
   auditEventId: string;
@@ -26,9 +29,20 @@ export interface PurchaseRewardResult {
   resultingBalance: number;
 }
 
-const REWARD_COLUMNS = "id, name, image_url, cost, active";
+const REWARD_COLUMNS = "id, family_id, name, image_url, cost, active";
 
-export async function getRewards(familyId: string): Promise<RewardRecord[]> {
+function mapRewardRow(row: RewardRow): ShopItem {
+  return {
+    id: row.id,
+    familyId: row.family_id,
+    name: row.name,
+    imageUrl: row.image_url,
+    cost: row.cost,
+    active: row.active,
+  };
+}
+
+export async function getRewards(familyId: string): Promise<ReadonlyArray<ShopItem>> {
   const { data, error } = await supabase
     .from("rewards")
     .select(REWARD_COLUMNS)
@@ -41,10 +55,10 @@ export async function getRewards(familyId: string): Promise<RewardRecord[]> {
     throw error;
   }
 
-  return data ?? [];
+  return (data ?? []).map(mapRewardRow);
 }
 
-export async function purchaseReward(input: PurchaseRewardInput): Promise<PurchaseRewardResult> {
+export async function purchaseReward(input: PurchaseRewardInput): Promise<PurchaseRewardReceipt> {
   const { data, error } = await supabase.rpc("purchase_reward", {
     p_family_id: input.familyId,
     p_member_id: input.memberId,
@@ -56,5 +70,5 @@ export async function purchaseReward(input: PurchaseRewardInput): Promise<Purcha
     throw error;
   }
 
-  return data as PurchaseRewardResult;
+  return data as PurchaseRewardReceipt;
 }

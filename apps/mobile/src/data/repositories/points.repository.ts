@@ -1,23 +1,36 @@
+import type { PointLedgerEntry } from "@famigo/domain";
+
 import { supabase } from "../supabase/client";
 
-export type PointTransactionType = "daily_points_received" | "shop_purchase";
-
-export interface PointTransaction {
+interface PointTransactionRow {
   id: string;
   family_id: string;
   member_id: string;
-  amount: number;
-  type: PointTransactionType;
+  points_delta: number;
+  type: PointLedgerEntry["type"];
   daily_point_allocation_id: string | null;
   reward_purchase_id: string | null;
   occurred_at: string;
-  created_at: string;
 }
 
 const POINT_TRANSACTION_COLUMNS =
-  "id, family_id, member_id, amount:points_delta, type, occurred_at, created_at, daily_point_allocation_id, reward_purchase_id";
+  "id, family_id, member_id, points_delta, type, occurred_at, daily_point_allocation_id, reward_purchase_id";
 
-export async function getPointTransactions(memberId: string): Promise<PointTransaction[]> {
+function mapPointTransactionRow(row: PointTransactionRow): PointLedgerEntry {
+  return {
+    id: row.id,
+    familyId: row.family_id,
+    memberId: row.member_id,
+    type: row.type,
+    pointsDelta: row.points_delta,
+    occurredAt: row.occurred_at,
+    referenceId: row.reward_purchase_id ?? row.daily_point_allocation_id ?? undefined,
+  };
+}
+
+export async function getPointTransactions(
+  memberId: string
+): Promise<ReadonlyArray<PointLedgerEntry>> {
   const { data, error } = await supabase
     .from("point_transactions")
     .select(POINT_TRANSACTION_COLUMNS)
@@ -28,5 +41,5 @@ export async function getPointTransactions(memberId: string): Promise<PointTrans
     throw error;
   }
 
-  return data ?? [];
+  return (data ?? []).map(mapPointTransactionRow);
 }

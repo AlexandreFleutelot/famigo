@@ -1,9 +1,9 @@
 import type { Member } from "@famigo/domain";
 
+import { getMemberById as getMemberByIdRepository } from "../../data/repositories/members.repository";
 import { createApplicationError } from "../errors";
-import type { AppSessionGateway, MembersGateway } from "../ports";
 import { executeUseCase, type UseCaseResult } from "../result";
-import type { AppSessionContext } from "../session";
+import type { AppSessionContext, AppSessionGateway } from "../session";
 
 export interface StartMemberSessionInput {
   memberId: string;
@@ -15,14 +15,16 @@ export interface StartMemberSessionData {
 }
 
 export interface StartMemberSessionDependencies {
-  membersGateway: MembersGateway;
   appSessionGateway: AppSessionGateway;
+  getMemberById?: typeof getMemberByIdRepository;
 }
 
 export function createStartMemberSessionUseCase(dependencies: StartMemberSessionDependencies) {
+  const { appSessionGateway, getMemberById = getMemberByIdRepository } = dependencies;
+
   return (input: StartMemberSessionInput): Promise<UseCaseResult<StartMemberSessionData>> =>
     executeUseCase(async () => {
-      const currentSession = await dependencies.appSessionGateway.read();
+      const currentSession = await appSessionGateway.read();
 
       if (
         currentSession?.selectedFamilyId === null ||
@@ -35,12 +37,9 @@ export function createStartMemberSessionUseCase(dependencies: StartMemberSession
         });
       }
 
-      const members = await dependencies.membersGateway.listFamilyMembers(
-        currentSession.selectedFamilyId
-      );
-      const member = members.find((candidate) => candidate.id === input.memberId);
+      const member = await getMemberById(input.memberId);
 
-      if (member === undefined) {
+      if (member === null || member.familyId !== currentSession.selectedFamilyId) {
         throw createApplicationError({
           code: "MEMBER_NOT_FOUND",
           kind: "domain",
@@ -53,7 +52,7 @@ export function createStartMemberSessionUseCase(dependencies: StartMemberSession
         selectedMemberId: member.id,
       };
 
-      await dependencies.appSessionGateway.save(session);
+      await appSessionGateway.save(session);
 
       return {
         member,

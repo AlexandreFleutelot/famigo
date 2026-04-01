@@ -1,8 +1,12 @@
-import type { AppSessionGateway } from "./ports";
-
 export interface AppSessionContext {
   selectedFamilyId: string | null;
   selectedMemberId: string | null;
+}
+
+export interface AppSessionGateway {
+  read(): Promise<AppSessionContext | null>;
+  save(session: AppSessionContext): Promise<void>;
+  clear(): Promise<void>;
 }
 
 export const EMPTY_APP_SESSION_CONTEXT: AppSessionContext = {

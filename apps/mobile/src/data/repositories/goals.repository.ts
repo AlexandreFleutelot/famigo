@@ -1,8 +1,8 @@
+import type { FamilyGoal, GoalStatus } from "@famigo/domain";
+
 import { supabase } from "../supabase/client";
 
-export type GoalStatus = "active" | "promised" | "archived";
-
-export interface GoalRecord {
+interface GoalRow {
   id: string;
   family_id: string;
   title: string;
@@ -20,7 +20,7 @@ export interface CastGoalVoteInput {
   dayKey: string;
 }
 
-export interface CastGoalVoteResult {
+export interface CastGoalVoteReceipt {
   voteId: string;
   voteAuditEventId: string;
   goalReachedAuditEventId: string | null;
@@ -35,7 +35,19 @@ export interface CastGoalVoteResult {
 const GOAL_COLUMNS =
   "id, family_id, title, target_vote_count, status, created_by_member_id, promised_at, created_at";
 
-export async function getActiveGoals(familyId: string): Promise<GoalRecord[]> {
+function mapGoalRow(row: GoalRow): FamilyGoal {
+  return {
+    id: row.id,
+    familyId: row.family_id,
+    title: row.title,
+    targetVoteCount: row.target_vote_count,
+    status: row.status,
+    createdByMemberId: row.created_by_member_id,
+    promisedAt: row.promised_at ?? undefined,
+  };
+}
+
+export async function getActiveGoals(familyId: string): Promise<ReadonlyArray<FamilyGoal>> {
   const { data, error } = await supabase
     .from("family_goals")
     .select(GOAL_COLUMNS)
@@ -47,10 +59,10 @@ export async function getActiveGoals(familyId: string): Promise<GoalRecord[]> {
     throw error;
   }
 
-  return data ?? [];
+  return (data ?? []).map(mapGoalRow);
 }
 
-export async function castVote(input: CastGoalVoteInput): Promise<CastGoalVoteResult> {
+export async function castVote(input: CastGoalVoteInput): Promise<CastGoalVoteReceipt> {
   const { data, error } = await supabase.rpc("cast_goal_vote", {
     p_family_id: input.familyId,
     p_member_id: input.memberId,
@@ -62,5 +74,5 @@ export async function castVote(input: CastGoalVoteInput): Promise<CastGoalVoteRe
     throw error;
   }
 
-  return data as CastGoalVoteResult;
+  return data as CastGoalVoteReceipt;
 }

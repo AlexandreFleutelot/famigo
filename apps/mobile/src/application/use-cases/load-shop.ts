@@ -1,6 +1,7 @@
 import { getPointBalance } from "@famigo/domain";
 
-import type { ShopGateway } from "../ports";
+import { getRewards as getRewardsRepository } from "../../data/repositories/shop.repository";
+import { getPointTransactions as getPointTransactionsRepository } from "../../data/repositories/points.repository";
 import { executeUseCase, type UseCaseResult } from "../result";
 
 export interface LoadShopInput {
@@ -15,15 +16,21 @@ export interface LoadShopData {
 }
 
 export interface LoadShopDependencies {
-  shopGateway: ShopGateway;
+  getRewards?: typeof getRewardsRepository;
+  getPointTransactions?: typeof getPointTransactionsRepository;
 }
 
-export function createLoadShopUseCase(dependencies: LoadShopDependencies) {
+export function createLoadShopUseCase(dependencies: LoadShopDependencies = {}) {
+  const {
+    getRewards = getRewardsRepository,
+    getPointTransactions = getPointTransactionsRepository,
+  } = dependencies;
+
   return (input: LoadShopInput): Promise<UseCaseResult<LoadShopData>> =>
     executeUseCase(async () => {
       const [items, ledgerEntries] = await Promise.all([
-        dependencies.shopGateway.listRewards(input.familyId),
-        dependencies.shopGateway.listPointLedgerEntries(input.memberId),
+        getRewards(input.familyId),
+        getPointTransactions(input.memberId),
       ]);
 
       return {

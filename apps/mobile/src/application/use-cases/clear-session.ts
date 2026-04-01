@@ -1,5 +1,5 @@
-import type { AppSessionGateway } from "../ports";
 import { executeUseCase, type UseCaseResult } from "../result";
+import type { AppSessionGateway } from "../session";
 
 export interface ClearSessionData {
   cleared: true;
