@@ -1,4 +1,18 @@
-import type { FamilyGoal, GoalStatus, Member, PointLedgerEntry, ShopItem } from "@famigo/domain";
+import type {
+  Family,
+  FamilyGoal,
+  GoalStatus,
+  Member,
+  PointLedgerEntry,
+  ShopItem,
+} from "@famigo/domain";
+
+import type { AppSessionContext } from "./session";
+
+export interface FamiliesGateway {
+  listFamilies(): Promise<ReadonlyArray<Family>>;
+  getFamilyById(familyId: string): Promise<Family | null>;
+}
 
 export interface MemberAuthSnapshot {
   id: string;
@@ -12,6 +26,12 @@ export interface MemberAuthSnapshot {
 export interface MembersGateway {
   listFamilyMembers(familyId: string): Promise<ReadonlyArray<Member>>;
   getMemberAuthSnapshot(memberId: string): Promise<MemberAuthSnapshot | null>;
+}
+
+export interface AppSessionGateway {
+  read(): Promise<AppSessionContext | null>;
+  save(session: AppSessionContext): Promise<void>;
+  clear(): Promise<void>;
 }
 
 export interface PinVerifier {

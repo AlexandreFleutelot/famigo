@@ -1,53 +1,226 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { FamilyGoal, Member, PointLedgerEntry, ShopItem } from "@famigo/domain";
+import type { Family, FamilyGoal, Member, PointLedgerEntry, ShopItem } from "@famigo/domain";
 
 import { ApplicationError } from "./errors";
 import type {
+  FamiliesGateway,
   GoalsGateway,
   MembersGateway,
   PinVerifier,
   ShopGateway,
 } from "./ports";
+import { createMemoryAppSessionGateway } from "./session";
 import { createBuyRewardUseCase } from "./use-cases/buy-reward";
 import { createCastGoalVoteUseCase } from "./use-cases/cast-goal-vote";
+import { createClearSessionUseCase } from "./use-cases/clear-session";
+import { createGetFamiliesUseCase } from "./use-cases/get-families";
+import { createGetMembersForSelectedFamilyUseCase } from "./use-cases/get-members-for-selected-family";
 import { createLoadShopUseCase } from "./use-cases/load-shop";
 import { createLoginWithPinUseCase } from "./use-cases/login-with-pin";
+import { createRestoreSessionUseCase } from "./use-cases/restore-session";
+import { createSelectFamilyUseCase } from "./use-cases/select-family";
+import { createStartMemberSessionUseCase } from "./use-cases/start-member-session";
 
 const familyId = "family-1";
 const memberId = "member-1";
 
 describe("application use cases", () => {
+  it("lists available families", async () => {
+    const familiesGateway: FamiliesGateway = {
+      listFamilies: vi.fn(
+        async (): Promise<ReadonlyArray<Family>> => [{ id: familyId, name: "Famille Martin" }]
+      ),
+      getFamilyById: vi.fn(),
+    };
+
+    const getFamilies = createGetFamiliesUseCase({ familiesGateway });
+    const result = await getFamilies();
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        families: [{ id: familyId, name: "Famille Martin" }],
+      },
+    });
+  });
+
+  it("selects a family, loads its members, and starts a simple member session", async () => {
+    const familiesGateway: FamiliesGateway = {
+      listFamilies: vi.fn(),
+      getFamilyById: vi.fn(async () => ({ id: familyId, name: "Famille Martin" })),
+    };
+    const membersGateway: MembersGateway = {
+      listFamilyMembers: vi.fn(
+        async (): Promise<ReadonlyArray<Member>> => [
+          {
+            id: memberId,
+            familyId,
+            displayName: "Alice",
+            role: "parent",
+            pin: "",
+          },
+        ]
+      ),
+      getMemberAuthSnapshot: vi.fn(),
+    };
+    const appSessionGateway = createMemoryAppSessionGateway();
+
+    const selectFamily = createSelectFamilyUseCase({
+      familiesGateway,
+      appSessionGateway,
+    });
+    const getMembersForSelectedFamily = createGetMembersForSelectedFamilyUseCase({
+      membersGateway,
+      appSessionGateway,
+    });
+    const startMemberSession = createStartMemberSessionUseCase({
+      membersGateway,
+      appSessionGateway,
+    });
+
+    const selectedFamily = await selectFamily({ familyId });
+    const members = await getMembersForSelectedFamily();
+    const startedSession = await startMemberSession({ memberId });
+
+    expect(selectedFamily).toEqual({
+      ok: true,
+      data: {
+        family: { id: familyId, name: "Famille Martin" },
+        session: {
+          selectedFamilyId: familyId,
+          selectedMemberId: null,
+        },
+      },
+    });
+    expect(members).toEqual({
+      ok: true,
+      data: {
+        familyId,
+        members: [
+          {
+            id: memberId,
+            familyId,
+            displayName: "Alice",
+            role: "parent",
+            pin: "",
+          },
+        ],
+        session: {
+          selectedFamilyId: familyId,
+          selectedMemberId: null,
+        },
+      },
+    });
+    expect(startedSession).toEqual({
+      ok: true,
+      data: {
+        member: {
+          id: memberId,
+          familyId,
+          displayName: "Alice",
+          role: "parent",
+          pin: "",
+        },
+        session: {
+          selectedFamilyId: familyId,
+          selectedMemberId: memberId,
+        },
+      },
+    });
+  });
+
+  it("restores a stored family selection and drops a stale member selection", async () => {
+    const familiesGateway: FamiliesGateway = {
+      listFamilies: vi.fn(),
+      getFamilyById: vi.fn(async () => ({ id: familyId, name: "Famille Martin" })),
+    };
+    const membersGateway: MembersGateway = {
+      listFamilyMembers: vi.fn(async (): Promise<ReadonlyArray<Member>> => []),
+      getMemberAuthSnapshot: vi.fn(),
+    };
+    const appSessionGateway = createMemoryAppSessionGateway({
+      selectedFamilyId: familyId,
+      selectedMemberId: "missing-member",
+    });
+
+    const restoreSession = createRestoreSessionUseCase({
+      familiesGateway,
+      membersGateway,
+      appSessionGateway,
+    });
+
+    const result = await restoreSession();
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        family: { id: familyId, name: "Famille Martin" },
+        member: null,
+        session: {
+          selectedFamilyId: familyId,
+          selectedMemberId: null,
+        },
+      },
+    });
+    await expect(appSessionGateway.read()).resolves.toEqual({
+      selectedFamilyId: familyId,
+      selectedMemberId: null,
+    });
+  });
+
+  it("clears the stored app session", async () => {
+    const appSessionGateway = createMemoryAppSessionGateway({
+      selectedFamilyId: familyId,
+      selectedMemberId: memberId,
+    });
+    const clearSession = createClearSessionUseCase({ appSessionGateway });
+
+    const result = await clearSession();
+
+    expect(result).toEqual({
+      ok: true,
+      data: {
+        cleared: true,
+      },
+    });
+    await expect(appSessionGateway.read()).resolves.toBeNull();
+  });
+
   it("loads the shop with a computed balance", async () => {
     const shopGateway: ShopGateway = {
-      listRewards: vi.fn(async (): Promise<ReadonlyArray<ShopItem>> => [
-        {
-          id: "reward-1",
-          familyId,
-          name: "Cinema",
-          imageUrl: "cinema",
-          cost: 4,
-          active: true,
-        },
-      ]),
-      listPointLedgerEntries: vi.fn(async (): Promise<ReadonlyArray<PointLedgerEntry>> => [
-        {
-          id: "ledger-1",
-          familyId,
-          memberId,
-          type: "daily_points_received" as const,
-          pointsDelta: 7,
-          occurredAt: "2026-03-31T18:00:00.000Z",
-        },
-        {
-          id: "ledger-2",
-          familyId,
-          memberId,
-          type: "shop_purchase" as const,
-          pointsDelta: -2,
-          occurredAt: "2026-03-31T19:00:00.000Z",
-        },
-      ]),
+      listRewards: vi.fn(
+        async (): Promise<ReadonlyArray<ShopItem>> => [
+          {
+            id: "reward-1",
+            familyId,
+            name: "Cinema",
+            imageUrl: "cinema",
+            cost: 4,
+            active: true,
+          },
+        ]
+      ),
+      listPointLedgerEntries: vi.fn(
+        async (): Promise<ReadonlyArray<PointLedgerEntry>> => [
+          {
+            id: "ledger-1",
+            familyId,
+            memberId,
+            type: "daily_points_received" as const,
+            pointsDelta: 7,
+            occurredAt: "2026-03-31T18:00:00.000Z",
+          },
+          {
+            id: "ledger-2",
+            familyId,
+            memberId,
+            type: "shop_purchase" as const,
+            pointsDelta: -2,
+            occurredAt: "2026-03-31T19:00:00.000Z",
+          },
+        ]
+      ),
       purchaseReward: vi.fn(),
     };
 
@@ -244,16 +417,18 @@ describe("application use cases", () => {
 
   it("maps the goal vote receipt back to a domain goal", async () => {
     const goalsGateway: GoalsGateway = {
-      listGoals: vi.fn(async (): Promise<ReadonlyArray<FamilyGoal>> => [
-        {
-          id: "goal-1",
-          familyId,
-          title: "Soiree jeux",
-          targetVoteCount: 3,
-          status: "active",
-          createdByMemberId: "parent-1",
-        },
-      ]),
+      listGoals: vi.fn(
+        async (): Promise<ReadonlyArray<FamilyGoal>> => [
+          {
+            id: "goal-1",
+            familyId,
+            title: "Soiree jeux",
+            targetVoteCount: 3,
+            status: "active",
+            createdByMemberId: "parent-1",
+          },
+        ]
+      ),
       castGoalVote: vi.fn(async () => ({
         voteId: "vote-1",
         voteAuditEventId: "audit-vote-1",
