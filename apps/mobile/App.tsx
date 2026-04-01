@@ -1,7 +1,17 @@
-import type { FamilyGoal, HistoryEvent, Member } from "@famigo/domain";
-import { useMemo, useState } from "react";
+import type { Family, FamilyGoal, HistoryEvent, Member } from "@famigo/domain";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
 
+import type { AppSessionGateway } from "./src/application";
+import {
+  createClearSessionUseCase,
+  createGetFamiliesUseCase,
+  createGetMembersForSelectedFamilyUseCase,
+  createMemoryAppSessionGateway,
+  createRestoreSessionUseCase,
+  createSelectFamilyUseCase,
+  createStartMemberSessionUseCase,
+} from "./src/application";
 import {
   buyShopItem,
   createFamilyGoal,
@@ -14,7 +24,6 @@ import {
   getPendingPointsForMember,
   getRemainingBudgetForMember,
   hasMemberVotedToday,
-  loginWithPin,
   logout,
   simulateEndOfDay,
   updatePointAllocation,
@@ -27,7 +36,6 @@ import {
   InlineField,
   MemberBadge,
   MetricGrid,
-  PinPad,
   PrimaryButton,
   ProgressBar,
   SecondaryButton,
@@ -37,6 +45,7 @@ import {
 } from "./src/ui";
 
 type MainTab = "home" | "points" | "shop" | "goals" | "history" | "profile";
+type AuthStage = "loading" | "family" | "member";
 
 const tabs: ReadonlyArray<{ key: MainTab; label: string }> = [
   { key: "home", label: "Accueil" },
@@ -48,25 +57,55 @@ const tabs: ReadonlyArray<{ key: MainTab; label: string }> = [
 ];
 
 export default function App() {
+  const appSessionGatewayRef = useRef<AppSessionGateway>(createMemoryAppSessionGateway());
+  const getFamilies = useRef(createGetFamiliesUseCase()).current;
+  const selectFamily = useRef(
+    createSelectFamilyUseCase({ appSessionGateway: appSessionGatewayRef.current })
+  ).current;
+  const getMembersForSelectedFamily = useRef(
+    createGetMembersForSelectedFamilyUseCase({ appSessionGateway: appSessionGatewayRef.current })
+  ).current;
+  const startMemberSession = useRef(
+    createStartMemberSessionUseCase({ appSessionGateway: appSessionGatewayRef.current })
+  ).current;
+  const restoreSession = useRef(
+    createRestoreSessionUseCase({ appSessionGateway: appSessionGatewayRef.current })
+  ).current;
+  const clearSession = useRef(
+    createClearSessionUseCase({ appSessionGateway: appSessionGatewayRef.current })
+  ).current;
+
   const [appState, setAppState] = useState(createInitialMockAppState);
+  const [authStage, setAuthStage] = useState<AuthStage>("loading");
+  const [availableFamilies, setAvailableFamilies] = useState<ReadonlyArray<Family>>([]);
+  const [availableMembers, setAvailableMembers] = useState<ReadonlyArray<Member>>([]);
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [pinInput, setPinInput] = useState("");
+  const [isAuthBusy, setIsAuthBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<MainTab>("home");
   const [message, setMessage] = useState<string | null>(null);
   const [goalTitleInput, setGoalTitleInput] = useState("");
   const [goalTargetInput, setGoalTargetInput] = useState("3");
 
   const currentMember = useMemo(() => getCurrentMember(appState), [appState]);
+  const selectedFamily =
+    selectedFamilyId === null
+      ? null
+      : (availableFamilies.find((family) => family.id === selectedFamilyId) ?? null);
   const selectedMember =
     selectedMemberId === null
       ? null
-      : (appState.members.find((member) => member.id === selectedMemberId) ?? null);
+      : (availableMembers.find((member) => member.id === selectedMemberId) ?? null);
 
   const currentBalance = currentMember ? getBalanceForMember(appState, currentMember.id) : 0;
   const currentPending = currentMember ? getPendingPointsForMember(appState, currentMember.id) : 0;
   const currentRemaining =
     currentMember !== null ? getRemainingBudgetForMember(appState, currentMember.id) : 0;
   const hasVotedToday = currentMember ? hasMemberVotedToday(appState, currentMember.id) : false;
+
+  useEffect(() => {
+    void bootstrapSessionFlow();
+  }, []);
 
   function applyMutation(
     next: { state: typeof appState; errorMessage?: string },
@@ -76,68 +115,198 @@ export default function App() {
     setMessage(next.errorMessage ?? success ?? null);
   }
 
-  function handlePinDigit(digit: string) {
-    if (pinInput.length >= 4) {
+  function syncMockStateWithSelectedSession(
+    family: Family,
+    members: ReadonlyArray<Member>,
+    memberId: string | null
+  ) {
+    setAppState((previous) => ({
+      ...previous,
+      family,
+      members: [...members],
+      session:
+        memberId === null
+          ? null
+          : {
+              familyId: family.id,
+              memberId,
+              startedAt: new Date().toISOString(),
+            },
+    }));
+  }
+
+  async function bootstrapSessionFlow() {
+    setIsAuthBusy(true);
+
+    const [familiesResult, restoreResult] = await Promise.all([getFamilies(), restoreSession()]);
+
+    if (!familiesResult.ok) {
+      setAvailableFamilies([]);
+      setAuthStage("family");
+      setIsAuthBusy(false);
+      setMessage(familiesResult.error.message);
       return;
     }
 
-    const nextPin = `${pinInput}${digit}`;
-    setPinInput(nextPin);
+    setAvailableFamilies(familiesResult.data.families);
 
-    if (nextPin.length === 4 && selectedMemberId !== null) {
-      const result = loginWithPin(appState, selectedMemberId, nextPin, new Date().toISOString());
-
-      applyMutation(result);
-      if (!result.errorMessage) {
-        setPinInput("");
-        setSelectedMemberId(null);
-        setActiveTab("home");
-      }
+    if (!restoreResult.ok) {
+      setAuthStage("family");
+      setIsAuthBusy(false);
+      setMessage(restoreResult.error.message);
+      return;
     }
+
+    const restoredFamily = restoreResult.data.family;
+    const restoredMember = restoreResult.data.member;
+
+    if (restoredFamily === null) {
+      setSelectedFamilyId(null);
+      setSelectedMemberId(null);
+      setAvailableMembers([]);
+      setAuthStage("family");
+      setIsAuthBusy(false);
+      return;
+    }
+
+    setSelectedFamilyId(restoredFamily.id);
+
+    const membersResult = await getMembersForSelectedFamily();
+
+    if (!membersResult.ok) {
+      setAvailableMembers([]);
+      setSelectedMemberId(null);
+      setAuthStage("family");
+      setIsAuthBusy(false);
+      setMessage(membersResult.error.message);
+      return;
+    }
+
+    setAvailableMembers(membersResult.data.members);
+
+    if (restoredMember === null) {
+      syncMockStateWithSelectedSession(restoredFamily, membersResult.data.members, null);
+      setSelectedMemberId(null);
+      setAuthStage("member");
+      setIsAuthBusy(false);
+      return;
+    }
+
+    syncMockStateWithSelectedSession(
+      restoredFamily,
+      membersResult.data.members,
+      restoredMember.id
+    );
+    setSelectedMemberId(restoredMember.id);
+    setActiveTab("home");
+    setAuthStage("member");
+    setIsAuthBusy(false);
   }
 
-  function handleLogout() {
-    setAppState((previous) => logout(previous));
+  async function handleFamilySelection(familyId: string) {
+    setIsAuthBusy(true);
+    setMessage(null);
+
+    const familyResult = await selectFamily({ familyId });
+
+    if (!familyResult.ok) {
+      setIsAuthBusy(false);
+      setMessage(familyResult.error.message);
+      return;
+    }
+
+    const membersResult = await getMembersForSelectedFamily();
+
+    if (!membersResult.ok) {
+      setIsAuthBusy(false);
+      setMessage(membersResult.error.message);
+      return;
+    }
+
+    setSelectedFamilyId(familyResult.data.family.id);
     setSelectedMemberId(null);
-    setPinInput("");
+    setAvailableMembers(membersResult.data.members);
+    syncMockStateWithSelectedSession(familyResult.data.family, membersResult.data.members, null);
+    setAuthStage("member");
+    setIsAuthBusy(false);
+  }
+
+  async function handleMemberSessionStart() {
+    if (selectedMemberId === null || selectedFamily === null) {
+      return;
+    }
+
+    setIsAuthBusy(true);
+    setMessage(null);
+
+    const sessionResult = await startMemberSession({ memberId: selectedMemberId });
+
+    if (!sessionResult.ok) {
+      setIsAuthBusy(false);
+      setMessage(sessionResult.error.message);
+      return;
+    }
+
+    syncMockStateWithSelectedSession(selectedFamily, availableMembers, sessionResult.data.member.id);
+    setActiveTab("home");
+    setIsAuthBusy(false);
+  }
+
+  async function handleLogout() {
+    await clearSession();
+    setAppState((previous) => logout(previous));
+    setAvailableMembers([]);
+    setSelectedFamilyId(null);
+    setSelectedMemberId(null);
+    setAuthStage("family");
     setActiveTab("home");
     setMessage(null);
   }
 
   function renderLoggedOut() {
-    if (selectedMember !== null) {
+    if (authStage === "loading") {
       return (
-        <AppScreen
-          title="Saisir le PIN"
-          subtitle={`Connexion de ${selectedMember.displayName} sur ${appState.family.name}`}
-        >
+        <AppScreen title="Famigo" subtitle="Restauration du contexte de session.">
+          <SectionCard subtitle="Chargement en cours..." />
+        </AppScreen>
+      );
+    }
+
+    if (authStage === "family") {
+      return (
+        <AppScreen title="Famigo" subtitle="Selectionnez une famille pour commencer.">
           {message ? <InfoMessage tone="error">{message}</InfoMessage> : null}
-          <SectionCard title={selectedMember.displayName} subtitle="Entrez le PIN a 4 chiffres">
-            <PinPad
-              value={pinInput}
-              onDigitPress={handlePinDigit}
-              onBackspace={() => setPinInput((current) => current.slice(0, -1))}
-            />
-            <SecondaryButton
-              label="Changer de membre"
-              onPress={() => {
-                setSelectedMemberId(null);
-                setPinInput("");
-                setMessage(null);
-              }}
-            />
+          <SectionCard title="Familles disponibles">
+            {availableFamilies.map((family) => (
+              <SecondaryButton
+                key={family.id}
+                label={selectedFamilyId === family.id ? `${family.name} (selectionnee)` : family.name}
+                onPress={() => void handleFamilySelection(family.id)}
+                disabled={isAuthBusy}
+              />
+            ))}
+            {availableFamilies.length === 0 ? (
+              <Text style={styles.helperText}>Aucune famille disponible pour le moment.</Text>
+            ) : null}
           </SectionCard>
         </AppScreen>
       );
     }
 
     return (
-      <AppScreen title="Famigo" subtitle="Selectionnez un membre de la famille pour commencer.">
-        {message ? <InfoMessage tone="info">{message}</InfoMessage> : null}
+      <AppScreen
+        title="Choisir un membre"
+        subtitle={
+          selectedFamily
+            ? `Profils disponibles dans ${selectedFamily.name}`
+            : "Selectionnez un membre de la famille."
+        }
+      >
+        {message ? <InfoMessage tone="error">{message}</InfoMessage> : null}
         <SectionCard title="Qui se connecte ?">
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.memberCarousel}>
-              {appState.members.map((member) => (
+              {availableMembers.map((member) => (
                 <MemberBadge
                   key={member.id}
                   name={member.displayName}
@@ -149,26 +318,28 @@ export default function App() {
             </View>
           </ScrollView>
           <PrimaryButton
-            label="Continuer"
-            onPress={() => {
-              if (selectedMemberId !== null) {
-                setMessage(null);
-              }
-            }}
-            disabled={selectedMemberId === null}
+            label={isAuthBusy ? "Connexion..." : "Continuer"}
+            onPress={() => void handleMemberSessionStart()}
+            disabled={selectedMemberId === null || isAuthBusy}
           />
-          {selectedMemberId !== null ? (
-            <PrimaryButton
-              label="Saisir le PIN"
-              onPress={() => {
-                setMessage(null);
-              }}
+          <SecondaryButton
+            label="Changer de famille"
+            onPress={() => {
+              setAvailableMembers([]);
+              setSelectedFamilyId(null);
+              setSelectedMemberId(null);
+              setAuthStage("family");
+              setMessage(null);
+              void clearSession();
+            }}
+            disabled={isAuthBusy}
+          />
+          {selectedMember !== null ? (
+            <SectionCard
+              subtitle={`${selectedMember.displayName} est selectionne. Le PIN sera rebranche dans une prochaine etape.`}
             />
           ) : null}
         </SectionCard>
-        {selectedMemberId !== null ? (
-          <SectionCard subtitle="Le membre est selectionne. Appuyez sur Saisir le PIN pour continuer." />
-        ) : null}
       </AppScreen>
     );
   }
@@ -410,7 +581,7 @@ export default function App() {
           <Text style={styles.helperText}>Famille : {appState.family.name}</Text>
           <Text style={styles.helperText}>Journee : {appState.currentDayKey}</Text>
         </SectionCard>
-        <PrimaryButton label="Se deconnecter" onPress={handleLogout} />
+        <PrimaryButton label="Se deconnecter" onPress={() => void handleLogout()} />
       </AppScreen>
     );
   }
