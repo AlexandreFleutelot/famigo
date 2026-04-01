@@ -1,7 +1,8 @@
-import { DomainError, purchaseShopItem } from "@famigo/domain";
-
+import {
+  getRewards as getRewardsRepository,
+  purchaseReward as purchaseRewardRepository,
+} from "../../data/repositories/shop.repository";
 import { createApplicationError } from "../errors";
-import type { ShopGateway } from "../ports";
 import { executeUseCase, type UseCaseResult } from "../result";
 
 export interface BuyRewardInput {
@@ -9,9 +10,6 @@ export interface BuyRewardInput {
   memberId: string;
   rewardId: string;
   purchasedAt: string;
-  purchaseId: string;
-  ledgerEntryId: string;
-  historyEventId: string;
 }
 
 export interface BuyRewardData {
@@ -24,16 +22,19 @@ export interface BuyRewardData {
 }
 
 export interface BuyRewardDependencies {
-  shopGateway: ShopGateway;
+  getRewards?: typeof getRewardsRepository;
+  purchaseReward?: typeof purchaseRewardRepository;
 }
 
-export function createBuyRewardUseCase(dependencies: BuyRewardDependencies) {
+export function createBuyRewardUseCase(dependencies: BuyRewardDependencies = {}) {
+  const {
+    getRewards = getRewardsRepository,
+    purchaseReward = purchaseRewardRepository,
+  } = dependencies;
+
   return (input: BuyRewardInput): Promise<UseCaseResult<BuyRewardData>> =>
     executeUseCase(async () => {
-      const [items, ledgerEntries] = await Promise.all([
-        dependencies.shopGateway.listRewards(input.familyId),
-        dependencies.shopGateway.listPointLedgerEntries(input.memberId),
-      ]);
+      const items = await getRewards(input.familyId);
 
       const item = items.find((candidate) => candidate.id === input.rewardId);
 
@@ -45,31 +46,7 @@ export function createBuyRewardUseCase(dependencies: BuyRewardDependencies) {
         });
       }
 
-      try {
-        purchaseShopItem({
-          id: input.purchaseId,
-          buyerMemberId: input.memberId,
-          familyId: input.familyId,
-          item,
-          existingLedgerEntries: ledgerEntries,
-          purchasedAt: input.purchasedAt,
-          ledgerEntryId: input.ledgerEntryId,
-          historyEventId: input.historyEventId,
-        });
-      } catch (error) {
-        if (error instanceof DomainError) {
-          throw error;
-        }
-
-        throw createApplicationError({
-          code: "SHOP_PURCHASE_PREFLIGHT_FAILED",
-          kind: "configuration",
-          message: "La validation locale de l'achat a echoue.",
-          cause: error,
-        });
-      }
-
-      const receipt = await dependencies.shopGateway.purchaseReward({
+      const receipt = await purchaseReward({
         familyId: input.familyId,
         memberId: input.memberId,
         rewardId: input.rewardId,
