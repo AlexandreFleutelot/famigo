@@ -32,6 +32,19 @@ export interface CastGoalVoteReceipt {
   totalVotes: number;
 }
 
+interface GoalVoteCountRow {
+  family_goal_id: string;
+}
+
+interface MemberVoteRow {
+  id: string;
+}
+
+export interface GoalProgressSnapshot {
+  voteCountsByGoalId: Readonly<Record<string, number>>;
+  hasMemberVotedToday: boolean;
+}
+
 const GOAL_COLUMNS =
   "id, family_id, title, target_vote_count, status, created_by_member_id, promised_at, created_at";
 
@@ -60,6 +73,54 @@ export async function getActiveGoals(familyId: string): Promise<ReadonlyArray<Fa
   }
 
   return (data ?? []).map(mapGoalRow);
+}
+
+export async function getGoalProgressSnapshot(input: {
+  familyId: string;
+  memberId: string;
+  dayKey: string;
+  goalIds: ReadonlyArray<string>;
+}): Promise<GoalProgressSnapshot> {
+  if (input.goalIds.length === 0) {
+    return {
+      voteCountsByGoalId: {},
+      hasMemberVotedToday: false,
+    };
+  }
+
+  const [{ data: voteCountRows, error: voteCountError }, { data: memberVotes, error: memberVoteError }] =
+    await Promise.all([
+      supabase
+        .from("goal_votes")
+        .select("family_goal_id")
+        .eq("family_id", input.familyId)
+        .in("family_goal_id", [...input.goalIds]),
+      supabase
+        .from("goal_votes")
+        .select("id")
+        .eq("family_id", input.familyId)
+        .eq("member_id", input.memberId)
+        .eq("day_key", input.dayKey)
+        .limit(1),
+    ]);
+
+  if (voteCountError) {
+    throw voteCountError;
+  }
+
+  if (memberVoteError) {
+    throw memberVoteError;
+  }
+
+  const voteCountsByGoalId = (voteCountRows ?? []).reduce<Record<string, number>>((counts, row) => {
+    counts[row.family_goal_id] = (counts[row.family_goal_id] ?? 0) + 1;
+    return counts;
+  }, {});
+
+  return {
+    voteCountsByGoalId,
+    hasMemberVotedToday: (memberVotes ?? []).length > 0,
+  };
 }
 
 export async function castVote(input: CastGoalVoteInput): Promise<CastGoalVoteReceipt> {

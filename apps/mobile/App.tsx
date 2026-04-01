@@ -102,7 +102,7 @@ export default function App() {
   const [isGoalsBusy, setIsGoalsBusy] = useState(false);
   const [loadedGoalsSessionKey, setLoadedGoalsSessionKey] = useState<string | null>(null);
   const [goalVoteCounts, setGoalVoteCounts] = useState<Record<string, number>>({});
-  const [votedGoalsSessionKey, setVotedGoalsSessionKey] = useState<string | null>(null);
+  const [hasCurrentMemberVotedToday, setHasCurrentMemberVotedToday] = useState(false);
 
   const currentMember = useMemo(() => getCurrentMember(appState), [appState]);
   const selectedFamily =
@@ -126,7 +126,7 @@ export default function App() {
   const currentPending = currentMember ? getPendingPointsForMember(appState, currentMember.id) : 0;
   const currentRemaining =
     currentMember !== null ? getRemainingBudgetForMember(appState, currentMember.id) : 0;
-  const hasVotedToday = currentSessionKey !== null && votedGoalsSessionKey === currentSessionKey;
+  const hasVotedToday = hasCurrentMemberVotedToday;
   const isShopLoaded = currentSessionKey !== null && loadedShopSessionKey === currentSessionKey;
   const isGoalsLoaded = currentSessionKey !== null && loadedGoalsSessionKey === currentSessionKey;
 
@@ -161,6 +161,11 @@ export default function App() {
 
     void refreshGoalsData(selectedFamily.id, currentMember.id);
   }, [activeTab, currentMember, selectedFamily, isGoalsBusy, isGoalsLoaded]);
+
+  useEffect(() => {
+    setHasCurrentMemberVotedToday(false);
+    setGoalVoteCounts({});
+  }, [currentSessionKey]);
 
   function applyMutation(
     next: { state: typeof appState; errorMessage?: string },
@@ -289,7 +294,11 @@ export default function App() {
   ): Promise<boolean> {
     setIsGoalsBusy(true);
 
-    const loadGoalsResult = await loadGoals({ familyId });
+    const loadGoalsResult = await loadGoals({
+      familyId,
+      memberId,
+      dayKey: appState.currentDayKey,
+    });
 
     if (!loadGoalsResult.ok) {
       setIsGoalsBusy(false);
@@ -301,7 +310,8 @@ export default function App() {
       ...previous,
       goals: [...loadGoalsResult.data.goals],
     }));
-    setGoalVoteCounts({});
+    setGoalVoteCounts({ ...loadGoalsResult.data.voteCountsByGoalId });
+    setHasCurrentMemberVotedToday(loadGoalsResult.data.hasMemberVotedToday);
     setLoadedGoalsSessionKey(`${familyId}:${memberId}`);
     setIsGoalsBusy(false);
     setMessage(successMessage ?? null);
@@ -375,9 +385,11 @@ export default function App() {
       ...previous,
       [goalId]: castGoalVoteResult.data.totalVotes,
     }));
-    setVotedGoalsSessionKey(currentSessionKey);
-    setIsGoalsBusy(false);
-    setMessage(
+    setHasCurrentMemberVotedToday(true);
+
+    await refreshGoalsData(
+      selectedFamily.id,
+      currentMember.id,
       castGoalVoteResult.data.reachedTarget
         ? "Vote enregistre. Objectif atteint."
         : "Vote enregistre."
@@ -581,7 +593,7 @@ export default function App() {
     setLoadedShopSessionKey(null);
     setLoadedGoalsSessionKey(null);
     setGoalVoteCounts({});
-    setVotedGoalsSessionKey(null);
+    setHasCurrentMemberVotedToday(false);
     setPinInput("");
     setAuthStage("family");
     setActiveTab("home");
