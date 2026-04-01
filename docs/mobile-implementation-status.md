@@ -76,9 +76,21 @@ Etat :
 
 Etat :
 
-- pas encore migre vers la nouvelle couche applicative ;
-- repositories presents mais orchestration incomplete ;
+- chargement reel du draft quotidien du membre connecte ;
+- chargement reel des membres utiles a la repartition ;
+- edition reelle de la repartition du jour via la couche applicative ;
+- calcul reel des points en attente du membre connecte a partir des drafts du jour ;
+- finalisation reelle de la repartition du jour via la RPC `finalize_daily_point_allocation` ;
+- affichage `solde reel / points en attente / deja alloues / restant a distribuer` branche sur des donnees coherentes pour le membre connecte ;
+- mise a jour immediate apres finalisation du draft courant, du `pending points` et du ledger local ;
 - `dayKey` et refresh encore a centraliser.
+
+Regle d'affichage actuellement retenue :
+
+- `solde reel` vient du ledger ;
+- `points en attente` vient des allocations du jour encore en `draft` ;
+- `restant a distribuer` vient de l'allocation du jour du membre connecte ;
+- Home, Points, Profil et Boutique reutilisent maintenant la meme definition locale de ces metriques.
 
 ## 4. Tests actuellement poses
 
@@ -90,6 +102,10 @@ Des tests de couche applicative existent pour :
 - `startMemberSession` ;
 - `restoreSession` ;
 - `clearSession` ;
+- `loadDailyPoints` ;
+- `saveDailyPoints` ;
+- `loadPendingPoints` ;
+- `finalizeDailyPoints` ;
 - `loadShop` ;
 - `buyReward` ;
 - `loginWithPin` ;
@@ -105,13 +121,17 @@ Ils couvrent l'orchestration et les contrats, pas encore l'integration UI.
 - absence d'un service unique pour le calcul de `dayKey` ;
 - l'evenement `member_session_started` est bien produit par `loginWithPin`, mais n'est pas encore persiste en base depuis l'UI mobile ;
 - la verification concrete du PIN repose provisoirement sur une RPC SQL simple `verify_member_pin`.
+- `home`, `points`, `profile` et `shop` partagent maintenant une lecture coherente des metriques de points, meme si d'autres projections UI restent encore hybrides ;
+- la sauvegarde du draft quotidien reste volontairement simple cote mobile et ne passe pas encore par une RPC dediee.
+- la finalisation mobile fait confiance a la RPC puis recharge les projections utiles, sans systeme transactionnel mobile additionnel ;
+- l'historique partage n'est pas repousse en temps reel apres finalisation : son cache est invalide puis recharge au prochain acces.
 
 ## 6. Prochaine etape recommandee
 
-Maintenant que le flow d'entree, la boutique, les objectifs et la persistance simple de session sont branches, la prochaine etape la plus rentable est de continuer la bascule de l'UI principale vers la couche `application`, en commencant par :
+Maintenant que le flow d'entree, la boutique, les objectifs, la persistance simple de session et une premiere tranche `daily points` sont branches, la prochaine etape la plus rentable est de continuer la bascule de l'UI principale vers la couche `application`, en commencant par :
 
-- bascule de `daily points` hors de `mock-state` ;
 - chargement reel initial des donnees du membre connecte ;
 - chargement reel de l'historique partage ;
 - reduction du role de `mock-state` pour `home`, `history` et `profile` ;
+- centralisation plus propre du refresh apres ecritures metier ;
 - clarification ulterieure de la strategie definitive de verification PIN si besoin produit.

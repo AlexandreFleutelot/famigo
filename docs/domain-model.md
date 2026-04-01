@@ -208,6 +208,8 @@ Concept derive utile a l'experience.
 
 Il represente les points alloues pendant la journee mais non encore credites reellement.
 
+Dans le modele v1 actuel, il correspond fonctionnellement a la somme des lignes d'allocations quotidiennes encore en `draft` qui ciblent un membre pour le `dayKey` courant.
+
 ## 4. Regles d'invariants majeurs
 
 - Un membre ne s'attribue jamais de points a lui-meme.
@@ -240,6 +242,9 @@ Dans l'application mobile, ces regles sont maintenant relayees par une couche `a
 Use cases actuellement poses dans `apps/mobile/src/application` :
 
 - `loginWithPin` ;
+- `loadDailyPoints` ;
+- `saveDailyPoints` ;
+- `loadPendingPoints` ;
 - `loadShop` ;
 - `buyReward` ;
 - `loadGoals` ;

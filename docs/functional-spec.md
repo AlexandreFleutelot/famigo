@@ -88,6 +88,16 @@ Chaque membre dispose chaque jour de 5 points a distribuer aux autres membres de
 - Si un membre n'alloue qu'une partie de ses points, le reliquat est perdu.
 - Si un membre modifie plusieurs fois sa repartition dans la journee, seule la repartition finale avant cloture fait foi.
 
+### 5.5 Vocabulaire produit d'affichage
+
+Pour garder une lecture simple et coherente dans Home, Points et Profil :
+
+- le `solde reel` correspond uniquement aux points deja materialises dans le ledger ;
+- les `points en attente` correspondent aux points recus via des allocations du jour encore en `draft` ;
+- le `restant a distribuer` correspond au reliquat des 5 points quotidiens du membre connecte pour le `dayKey` courant ;
+- les points en attente ne sont jamais comptes dans le `solde reel` ni dans le solde utilisable en boutique ;
+- si aucune allocation du jour n'existe encore pour le membre connecte, le `restant a distribuer` vaut 5.
+
 ## 6. Boutique
 
 ### 6.1 Intention

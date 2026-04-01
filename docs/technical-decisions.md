@@ -84,6 +84,21 @@ Justification :
 - l'historique doit rester explicable ;
 - les recalculs et controles seront plus fiables.
 
+## 5 bis. Decision sur les metriques affichees
+
+Decision :
+
+- `solde reel` = somme des `point_transactions` du membre ;
+- `points en attente` = somme des lignes d'allocations du jour encore en `draft` qui ciblent ce membre ;
+- `restant a distribuer` = reliquat de l'allocation quotidienne du membre connecte pour le `dayKey` courant ;
+- ces metriques doivent etre derivees une seule fois cote mobile puis reutilisees dans Home, Points et Profil ;
+- aucun fallback mock divergent ne doit redefinir ces chiffres quand une projection reelle existe deja.
+
+Consequence technique :
+
+- l'UI mobile peut centraliser ces derivations directement dans `App.tsx` tant qu'aucune couche supplementaire n'apporte un gain clair ;
+- la boutique continue de s'appuyer uniquement sur le `solde reel`, sans inclure les points en attente.
+
 ## 6. Decision sur la journee produit
 
 Decision :

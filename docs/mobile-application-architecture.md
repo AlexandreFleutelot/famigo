@@ -29,6 +29,9 @@ Fichiers actuellement poses :
 - `use-cases/restore-session.ts`
 - `use-cases/clear-session.ts`
 - `use-cases/login-with-pin.ts`
+- `use-cases/load-daily-points.ts`
+- `use-cases/save-daily-points.ts`
+- `use-cases/load-pending-points.ts`
 - `use-cases/load-shop.ts`
 - `use-cases/buy-reward.ts`
 - `use-cases/load-goals.ts`
@@ -157,7 +160,38 @@ Responsabilites :
 - charger les objectifs actifs ou promis ;
 - renvoyer des objets directement conformes au domaine.
 
-### 4.11 `castGoalVote`
+### 4.11 `loadDailyPoints`
+
+Responsabilites :
+
+- charger le draft quotidien courant du membre connecte ;
+- creer une allocation vide en memoire si aucun draft n'existe encore ;
+- charger les membres utiles a la repartition ;
+- renvoyer a l'UI un etat simple `allocation + membres + totaux`.
+
+### 4.12 `saveDailyPoints`
+
+Responsabilites :
+
+- revalider localement les lignes via le domaine avant persistence ;
+- persister simplement le draft courant de la journee ;
+- renvoyer l'allocation sauvee avec les totaux mis a jour.
+
+Hypothese explicite :
+
+- pour cette tranche, la persistence du draft reste volontairement simple ;
+- elle ne passe pas encore par une RPC transactionnelle dediee ;
+- les contraintes SQL existantes continuent de proteger les invariants critiques.
+
+### 4.13 `loadPendingPoints`
+
+Responsabilites :
+
+- calculer les points en attente reels du membre connecte ;
+- sommer uniquement les lignes de drafts du `dayKey` courant qui ciblent ce membre ;
+- alimenter `home` et `profile` sans refonte plus large de l'UI principale.
+
+### 4.14 `castGoalVote`
 
 Responsabilites :
 
@@ -179,14 +213,15 @@ Responsabilites :
 - l'UI principale utilise encore largement le mock state ;
 - la strategie de cache et de refresh n'est pas encore definie ;
 - `dayKey` n'est pas encore fourni par un service unique partage ;
-- le flow d'entree famille / membre / PIN, la boutique et les objectifs sont branches, mais le reste de l'UI principale consomme encore largement le mock state ;
+- le flow d'entree famille / membre / PIN, la boutique, les objectifs et une premiere tranche `daily points` sont branches, mais le reste de l'UI principale consomme encore largement le mock state ;
 - la persistance du contexte mobile est maintenant branchee simplement sur `AsyncStorage` ;
-- les slices `daily points` ne sont pas encore branches de bout en bout.
+- `daily points` couvre maintenant le draft courant, le `pending points` du membre connecte et la finalisation de journee via RPC ;
+- apres finalisation, l'app recharge localement l'allocation, le `pending points` et le ledger, mais sans mecanisme global temps reel.
 
 ## 7. Etapes logiques suivantes
 
-- basculer `daily points` vers les vrais use cases ;
 - brancher ensuite le chargement initial complet des donnees du membre connecte ;
 - brancher un chargement reel de l'historique partage ;
 - reduire la dependance de `home` et `profile` aux projections issues du mock state ;
+- mieux centraliser les invalidations et refresh apres ecritures metier ;
 - poser la meme approche pour `daily points` avec un calcul unique de `dayKey`.

@@ -15,6 +15,12 @@ Il suit le domaine existant dans `packages/domain` et garde `point_transactions`
 - Les allocations quotidiennes sont separees entre un en-tete (`daily_point_allocations`) et des lignes (`daily_point_allocation_lines`) pour garder des contraintes relationnelles simples.
 - `audit_events` sert a la fois de trace d'audit minimale et de base pour l'historique partage visible dans l'app.
 
+Note d'usage mobile actuelle :
+
+- le `pending points` du membre connecte est maintenant derive en lisant les lignes de `daily_point_allocation_lines` rattachees a des allocations du jour encore en `draft` ;
+- la finalisation du draft du membre connecte est maintenant declenchee cote mobile via la RPC `finalize_daily_point_allocation` ;
+- le solde reel continue, lui, a rester fonde sur `point_transactions`.
+
 ## 3. Choix transverses
 
 ### 3.1 Identifiants
@@ -220,6 +226,11 @@ Contraintes :
 - trigger qui refuse l'auto-allocation ;
 - trigger qui refuse toute modification si l'allocation est deja finalisee ;
 - trigger qui refuse un total de points strictement superieur a 5.
+
+Usage applicatif actuel :
+
+- cette table sert maintenant aussi a calculer les points en attente reels du membre connecte ;
+- tant qu'une allocation reste en `draft`, ses lignes representent des gains potentiels non encore materialises dans `point_transactions`.
 
 ### 4.9 `point_transactions`
 
