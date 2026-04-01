@@ -13,12 +13,12 @@ L'objectif est d'eviter que les composants appellent l'infrastructure directemen
 
 ## 2. Structure actuelle
 
-La couche est organisee en quatre blocs :
+La couche est maintenant organisee en quatre blocs simples :
 
 - `use-cases/` : orchestration orientee intention utilisateur ;
-- `mappers/` : conversions entre records Supabase et types du domaine ;
-- `adapters/` : branchement concret sur les repositories existants ;
-- `ports.ts` : contrats attendus par les use cases.
+- `session.ts` : contexte applicatif minimal famille / membre ;
+- `result.ts` : contrat uniforme `ok` / `error` ;
+- `errors.ts` : erreurs applicatives exposees a l'UI.
 
 Fichiers actuellement poses :
 
@@ -33,11 +33,6 @@ Fichiers actuellement poses :
 - `use-cases/buy-reward.ts`
 - `use-cases/load-goals.ts`
 - `use-cases/cast-goal-vote.ts`
-- `adapters/supabase-gateways.ts`
-- `mappers/member.mapper.ts`
-- `mappers/family.mapper.ts`
-- `mappers/shop.mapper.ts`
-- `mappers/goals.mapper.ts`
 - `errors.ts`
 - `result.ts`
 - `session.ts`
@@ -50,28 +45,19 @@ Chaque use case :
 
 - recoit une intention claire venant de l'UI ;
 - charge les donnees necessaires ;
-- appelle le domaine si une validation ou une projection locale est utile ;
+- appelle le domaine seulement quand une regle pure apporte une vraie valeur immediate ;
 - delegue l'ecriture atomique a Supabase quand une RPC existe deja ;
 - renvoie un resultat uniforme `ok` ou `error`.
 
-### 3.2 Mappers
+### 3.2 Repositories
 
-Les mappers absorbent la difference entre :
+Les repositories Supabase restent simples et portent les conversions legeres necessaires entre :
 
 - les noms et formes de colonnes SQL ;
 - les types du domaine ;
 - les resultats JSON des RPC.
 
-Cela evite que ces conversions soient dupliquees dans les ecrans ou les hooks.
-
-### 3.3 Ports
-
-Les ports definissent ce que la couche applicative attend de l'infrastructure.
-Ils permettent de :
-
-- tester les use cases sans Supabase ;
-- remplacer une implementation concrete sans toucher l'orchestration ;
-- rendre visibles les dependances fonctionnelles de chaque cas d'usage.
+Cela evite de disperser ces conversions dans l'UI sans reintroduire une couche intermediaire de ports ou de mappers triviaux.
 
 ## 4. Use cases actuellement disponibles
 
@@ -153,8 +139,7 @@ Responsabilites :
 
 Responsabilites :
 
-- charger le cadeau et le ledger du membre ;
-- faire une prevalidation locale via le domaine ;
+- verifier que le cadeau cible existe dans la famille chargee ;
 - deleguer l'ecriture finale atomique a la RPC `purchase_reward` ;
 - renvoyer un recu d'achat exploitable par l'UI.
 
@@ -176,7 +161,7 @@ Responsabilites :
 ## 5. Regles de conception a conserver
 
 - ne pas remettre de logique metier critique dans l'UI ;
-- ne pas disperser les mappers dans plusieurs couches ;
+- garder des repositories simples sans ports ou mappers triviaux quand ils n'apportent rien ;
 - ne pas faire dependre `packages/domain` de Supabase ;
 - garder des use cases centres sur des intentions produit ;
 - garder le contexte de navigation/session mobile dans une couche applicative simple, pas dans le domaine ;

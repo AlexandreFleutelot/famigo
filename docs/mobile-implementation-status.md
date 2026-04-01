@@ -34,9 +34,9 @@ Les repositories Supabase dans `apps/mobile/src/data/repositories` couvrent deja
 
 La couche `apps/mobile/src/application` fournit maintenant :
 
-- des ports explicites ;
-- des adapters Supabase ;
-- des mappers centralises ;
+- des use cases explicites ;
+- un contexte de session minimal ;
+- un contrat uniforme `ok` / `error` ;
 - des use cases tests hors UI.
 
 ## 3. Slices couvertes
@@ -47,7 +47,7 @@ Etat :
 
 - chargement des cadeaux et du ledger disponibles ;
 - calcul du solde visible dans la couche applicative ;
-- achat branche sur la RPC `purchase_reward`.
+- achat branche sur la RPC `purchase_reward` sans prevalidation locale redondante.
 
 ### 3.2 Goals
 
@@ -98,7 +98,7 @@ Ils couvrent l'orchestration et les contrats, pas encore l'integration UI.
 
 - mismatch temporaire entre `pin_hash` en base et `pin` dans une partie du domaine ;
 - la persistance definitive de la session mobile n'est pas encore branchee sur un storage React Native ;
-- coexistence provisoire entre validations domaine TypeScript et executions atomiques SQL ;
+- coexistence provisoire entre modelisation domaine TypeScript et executions atomiques SQL ;
 - absence de strategie de cache mobile explicite ;
 - absence d'un service unique pour le calcul de `dayKey`.
 

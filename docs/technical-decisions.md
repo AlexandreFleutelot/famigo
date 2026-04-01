@@ -48,7 +48,7 @@ Decision d'implementation en cours :
 
 - une couche `apps/mobile/src/application` fait l'orchestration entre repositories Supabase, domaine et UI ;
 - cette couche expose des use cases explicites plutot que de laisser l'UI appeler les repositories directement ;
-- les conversions `record -> domaine` et `domaine -> payload d'infrastructure` doivent y rester centralisees.
+- les conversions legeres `SQL -> types applicatifs` restent au plus pres des repositories pour eviter des couches intermediaires inutiles.
 
 ### 3.3 UI mobile
 
@@ -152,6 +152,7 @@ Decision provisoire :
 
 - garder le domaine TypeScript comme reference de modelisation et de validation locale ;
 - garder les RPC SQL pour les operations transactionnelles qui doivent etre atomiques ;
+- ne pas dupliquer en TypeScript une validation complete deja portee par une RPC quand cela n'apporte pas de simplification concrete ;
 - documenter explicitement toute divergence temporaire entre validation locale et execution SQL.
 
 Consequence :
