@@ -4,11 +4,11 @@ import { SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "rea
 
 import type { AppSessionGateway } from "./src/application";
 import {
+  createAsyncStorageAppSessionGateway,
   createClearSessionUseCase,
   createGetFamiliesUseCase,
   createGetMembersForSelectedFamilyUseCase,
   createLoginWithPinUseCase,
-  createMemoryAppSessionGateway,
   createRestoreSessionUseCase,
   createSelectFamilyUseCase,
   createStartMemberSessionUseCase,
@@ -60,7 +60,7 @@ const tabs: ReadonlyArray<{ key: MainTab; label: string }> = [
 ];
 
 export default function App() {
-  const appSessionGatewayRef = useRef<AppSessionGateway>(createMemoryAppSessionGateway());
+  const appSessionGatewayRef = useRef<AppSessionGateway>(createAsyncStorageAppSessionGateway());
   const getFamilies = useRef(createGetFamiliesUseCase()).current;
   const selectFamily = useRef(
     createSelectFamilyUseCase({ appSessionGateway: appSessionGatewayRef.current })

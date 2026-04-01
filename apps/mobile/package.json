@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@famigo/domain": "*",
+    "@react-native-async-storage/async-storage": "^2.2.0",
     "@supabase/supabase-js": "^2.57.4",
     "expo": "~55.0.0",
     "react": "19.2.0",
