@@ -67,7 +67,9 @@ Etat :
 - adapter de session memoire disponible pour tests et branchement initial ;
 - use case `loginWithPin` disponible ;
 - verification PIN toujours delegatee a un `PinVerifier` abstrait ;
-- UI reelle non encore branchee de bout en bout.
+- flow UI reel branche pour `famille -> membre -> PIN -> ouverture de session` ;
+- au redemarrage, si un membre etait deja selectionne, l'app revient a l'etape PIN ;
+- la persistance reste volontairement simple et ne constitue pas encore une session auth durable.
 
 ### 3.4 Daily points
 
@@ -100,15 +102,16 @@ Ils couvrent l'orchestration et les contrats, pas encore l'integration UI.
 - la persistance definitive de la session mobile n'est pas encore branchee sur un storage React Native ;
 - coexistence provisoire entre modelisation domaine TypeScript et executions atomiques SQL ;
 - absence de strategie de cache mobile explicite ;
-- absence d'un service unique pour le calcul de `dayKey`.
+- absence d'un service unique pour le calcul de `dayKey` ;
+- l'evenement `member_session_started` est bien produit par `loginWithPin`, mais n'est pas encore persiste en base depuis l'UI mobile ;
+- la verification concrete du PIN repose provisoirement sur une RPC SQL simple `verify_member_pin`.
 
 ## 6. Prochaine etape recommandee
 
-La prochaine etape la plus rentable est de brancher un premier flux UI reel sur la couche `application`, en commencant par :
+Maintenant que le flow d'entree reel est branche, la prochaine etape la plus rentable est de continuer la bascule de l'UI principale vers la couche `application`, en commencant par :
 
-- liste des familles ;
-- selection d'un membre ;
-- carousel des membres de la famille selectionnee ;
-- restauration du contexte famille/membre au redemarrage ;
-- saisie du PIN sur le membre deja choisi ;
-- chargement initial des donnees du membre connecte.
+- chargement reel initial des donnees du membre connecte ;
+- bascule de la boutique sur `loadShop` puis `buyReward` ;
+- bascule des objectifs sur `loadGoals` puis `castGoalVote` ;
+- persistance reelle du contexte de session sur un storage React Native adapte ;
+- clarification ulterieure de la strategie definitive de verification PIN si besoin produit.

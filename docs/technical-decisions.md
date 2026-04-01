@@ -137,9 +137,11 @@ Etat d'implementation :
 - la couche applicative mobile introduit donc un composant de verification de PIN dedie ;
 - le domaine ne doit pas rester durablement couple a l'hypothese d'un `pin` en clair.
 
-Decision restante :
+Decision provisoirement retenue :
 
-- choisir si la verification definitive du PIN vit dans une fonction applicative locale, une RPC dediee ou un autre mecanisme de verification securise.
+- pour la tranche mobile actuelle, la verification concrete du PIN passe par une RPC SQL dediee tres simple ;
+- cette solution est suffisante pour brancher le flow v1 sans introduire de systeme d'auth plus large ;
+- le durcissement eventuel pourra etre reconsidere plus tard si le produit en a besoin.
 
 ## 9 bis. Decision sur le placement des regles metier
 

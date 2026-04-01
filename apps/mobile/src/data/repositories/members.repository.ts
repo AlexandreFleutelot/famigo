@@ -91,3 +91,19 @@ export async function getMemberAuthById(memberId: string): Promise<MemberAuth | 
 
   return data ? mapMemberAuthRow(data) : null;
 }
+
+export async function verifyMemberPin(input: {
+  pin: string;
+  pinHash: string;
+}): Promise<boolean> {
+  const { data, error } = await supabase.rpc("verify_member_pin", {
+    p_pin: input.pin,
+    p_pin_hash: input.pinHash,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data === true;
+}

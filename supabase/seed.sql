@@ -2,6 +2,7 @@
 -- Hypothese explicite:
 -- - ce fichier sert a peupler un projet Supabase vierge avec une famille minimale ;
 -- - les PIN sont haches avec `crypt(...)` pour rester compatibles avec une future verification reelle.
+-- - les PIN ci-dessous sont des PIN de demonstration uniquement.
 --
 -- PIN de demo:
 -- - Papa: 1234

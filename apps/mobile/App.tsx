@@ -7,11 +7,13 @@ import {
   createClearSessionUseCase,
   createGetFamiliesUseCase,
   createGetMembersForSelectedFamilyUseCase,
+  createLoginWithPinUseCase,
   createMemoryAppSessionGateway,
   createRestoreSessionUseCase,
   createSelectFamilyUseCase,
   createStartMemberSessionUseCase,
 } from "./src/application";
+import { verifyMemberPin } from "./src/data/repositories/members.repository";
 import {
   buyShopItem,
   createFamilyGoal,
@@ -36,6 +38,7 @@ import {
   InlineField,
   MemberBadge,
   MetricGrid,
+  PinPad,
   PrimaryButton,
   ProgressBar,
   SecondaryButton,
@@ -45,7 +48,7 @@ import {
 } from "./src/ui";
 
 type MainTab = "home" | "points" | "shop" | "goals" | "history" | "profile";
-type AuthStage = "loading" | "family" | "member";
+type AuthStage = "loading" | "family" | "member" | "pin";
 
 const tabs: ReadonlyArray<{ key: MainTab; label: string }> = [
   { key: "home", label: "Accueil" },
@@ -68,6 +71,13 @@ export default function App() {
   const startMemberSession = useRef(
     createStartMemberSessionUseCase({ appSessionGateway: appSessionGatewayRef.current })
   ).current;
+  const loginWithPin = useRef(
+    createLoginWithPinUseCase({
+      pinVerifier: {
+        verify: verifyMemberPin,
+      },
+    })
+  ).current;
   const restoreSession = useRef(
     createRestoreSessionUseCase({ appSessionGateway: appSessionGatewayRef.current })
   ).current;
@@ -84,6 +94,7 @@ export default function App() {
   const [isAuthBusy, setIsAuthBusy] = useState(false);
   const [activeTab, setActiveTab] = useState<MainTab>("home");
   const [message, setMessage] = useState<string | null>(null);
+  const [pinInput, setPinInput] = useState("");
   const [goalTitleInput, setGoalTitleInput] = useState("");
   const [goalTargetInput, setGoalTargetInput] = useState("3");
 
@@ -118,7 +129,8 @@ export default function App() {
   function syncMockStateWithSelectedSession(
     family: Family,
     members: ReadonlyArray<Member>,
-    memberId: string | null
+    memberId: string | null,
+    startedAt = new Date().toISOString()
   ) {
     setAppState((previous) => ({
       ...previous,
@@ -130,7 +142,7 @@ export default function App() {
           : {
               familyId: family.id,
               memberId,
-              startedAt: new Date().toISOString(),
+              startedAt,
             },
     }));
   }
@@ -187,19 +199,16 @@ export default function App() {
     if (restoredMember === null) {
       syncMockStateWithSelectedSession(restoredFamily, membersResult.data.members, null);
       setSelectedMemberId(null);
+      setPinInput("");
       setAuthStage("member");
       setIsAuthBusy(false);
       return;
     }
 
-    syncMockStateWithSelectedSession(
-      restoredFamily,
-      membersResult.data.members,
-      restoredMember.id
-    );
+    syncMockStateWithSelectedSession(restoredFamily, membersResult.data.members, null);
     setSelectedMemberId(restoredMember.id);
-    setActiveTab("home");
-    setAuthStage("member");
+    setPinInput("");
+    setAuthStage("pin");
     setIsAuthBusy(false);
   }
 
@@ -226,6 +235,7 @@ export default function App() {
     setSelectedFamilyId(familyResult.data.family.id);
     setSelectedMemberId(null);
     setAvailableMembers(membersResult.data.members);
+    setPinInput("");
     syncMockStateWithSelectedSession(familyResult.data.family, membersResult.data.members, null);
     setAuthStage("member");
     setIsAuthBusy(false);
@@ -247,8 +257,81 @@ export default function App() {
       return;
     }
 
-    syncMockStateWithSelectedSession(selectedFamily, availableMembers, sessionResult.data.member.id);
+    syncMockStateWithSelectedSession(selectedFamily, availableMembers, null);
+    setPinInput("");
+    setAuthStage("pin");
+    setIsAuthBusy(false);
+  }
+
+  function handlePinDigitPress(digit: string) {
+    setMessage(null);
+    setPinInput((currentValue) => {
+      if (currentValue.length >= 4) {
+        return currentValue;
+      }
+
+      return `${currentValue}${digit}`;
+    });
+  }
+
+  function handlePinBackspace() {
+    setMessage(null);
+    setPinInput((currentValue) => currentValue.slice(0, -1));
+  }
+
+  async function handlePinSubmit() {
+    if (selectedFamily === null || selectedMemberId === null) {
+      return;
+    }
+
+    setIsAuthBusy(true);
+    setMessage(null);
+
+    const loginResult = await loginWithPin({
+      familyId: selectedFamily.id,
+      memberId: selectedMemberId,
+      pin: pinInput,
+      now: new Date().toISOString(),
+      historyEventId: `member-session-${Date.now()}`,
+    });
+
+    if (!loginResult.ok) {
+      setIsAuthBusy(false);
+      setMessage(loginResult.error.message);
+      return;
+    }
+
+    syncMockStateWithSelectedSession(
+      selectedFamily,
+      availableMembers,
+      loginResult.data.session.memberId,
+      loginResult.data.session.startedAt
+    );
+    setPinInput("");
     setActiveTab("home");
+    setIsAuthBusy(false);
+  }
+
+  async function handleChangeSelectedMember() {
+    if (selectedFamilyId === null) {
+      return;
+    }
+
+    setIsAuthBusy(true);
+    setMessage(null);
+
+    const familyResult = await selectFamily({ familyId: selectedFamilyId });
+
+    if (!familyResult.ok) {
+      setIsAuthBusy(false);
+      setMessage(familyResult.error.message);
+      return;
+    }
+
+    setSelectedMemberId(null);
+    setPinInput("");
+    syncMockStateWithSelectedSession(familyResult.data.family, availableMembers, null);
+    setAuthStage("member");
     setIsAuthBusy(false);
   }
 
@@ -258,6 +341,7 @@ export default function App() {
     setAvailableMembers([]);
     setSelectedFamilyId(null);
     setSelectedMemberId(null);
+    setPinInput("");
     setAuthStage("family");
     setActiveTab("home");
     setMessage(null);
@@ -293,6 +377,54 @@ export default function App() {
       );
     }
 
+    if (authStage === "pin") {
+      return (
+        <AppScreen
+          title="Entrer le PIN"
+          subtitle={
+            selectedMember
+              ? `Saisissez le PIN a 4 chiffres de ${selectedMember.displayName}.`
+              : "Saisissez le PIN du membre selectionne."
+          }
+        >
+          {message ? <InfoMessage tone="error">{message}</InfoMessage> : null}
+          <SectionCard
+            title={selectedMember ? selectedMember.displayName : "Membre selectionne"}
+            subtitle="Le membre a deja ete choisi. Il ne reste qu'a valider le PIN."
+          >
+            <PinPad
+              value={pinInput}
+              onDigitPress={handlePinDigitPress}
+              onBackspace={handlePinBackspace}
+            />
+            <PrimaryButton
+              label={isAuthBusy ? "Verification..." : "Ouvrir la session"}
+              onPress={() => void handlePinSubmit()}
+              disabled={pinInput.length !== 4 || isAuthBusy}
+            />
+            <SecondaryButton
+              label="Changer de membre"
+              onPress={() => void handleChangeSelectedMember()}
+              disabled={isAuthBusy}
+            />
+            <SecondaryButton
+              label="Changer de famille"
+              onPress={() => {
+                setAvailableMembers([]);
+                setSelectedFamilyId(null);
+                setSelectedMemberId(null);
+                setPinInput("");
+                setAuthStage("family");
+                setMessage(null);
+                void clearSession();
+              }}
+              disabled={isAuthBusy}
+            />
+          </SectionCard>
+        </AppScreen>
+      );
+    }
+
     return (
       <AppScreen
         title="Choisir un membre"
@@ -318,7 +450,7 @@ export default function App() {
             </View>
           </ScrollView>
           <PrimaryButton
-            label={isAuthBusy ? "Connexion..." : "Continuer"}
+            label={isAuthBusy ? "Preparation..." : "Continuer"}
             onPress={() => void handleMemberSessionStart()}
             disabled={selectedMemberId === null || isAuthBusy}
           />
@@ -336,7 +468,7 @@ export default function App() {
           />
           {selectedMember !== null ? (
             <SectionCard
-              subtitle={`${selectedMember.displayName} est selectionne. Le PIN sera rebranche dans une prochaine etape.`}
+              subtitle={`${selectedMember.displayName} est selectionne. La saisie du PIN sera demandee a l'etape suivante.`}
             />
           ) : null}
         </SectionCard>

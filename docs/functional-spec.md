@@ -187,5 +187,5 @@ Les champs exacts du profil ne sont pas entierement definis dans ce document.
 - La definition exacte de "fin de journee" dependra du fuseau horaire ou du parametre de famille retenu en implementation.
 - Le comportement de reallocation apres un achat le meme jour devra etre verifie techniquement si le solde visible inclut ou non les gains en attente.
 - Le mode de gestion initiale des profils membres n'est pas specifie dans la v1.
-- En premiere iteration UI, la session mobile peut etre limitee a un contexte simple `selectedFamilyId + selectedMemberId` avant branchement complet de l'auth PIN.
+- En premiere iteration UI, la session mobile peut rester limitee a un contexte simple `selectedFamilyId + selectedMemberId`, mais le flow mobile courant branche deja la saisie puis la verification du PIN avant ouverture de session.
 - Le remplacement complet du mock state par des flux applicatifs reels est encore progressif.

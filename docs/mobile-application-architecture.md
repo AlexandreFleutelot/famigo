@@ -95,7 +95,8 @@ Responsabilites :
 Hypothese explicite :
 
 - pour cette tranche, `startMemberSession` ne verifie pas encore le PIN ;
-- la vraie auth PIN reste dans `loginWithPin` et sera rebranchee plus tard dans le flow complet.
+- le role de `startMemberSession` reste de memoriser le membre choisi dans le contexte minimal ;
+- la vraie validation PIN est ensuite delegatee a `loginWithPin` dans le flow UI courant.
 
 ### 4.5 `restoreSession`
 
@@ -126,6 +127,12 @@ Point d'attention :
 
 - le schema stocke `pin_hash`, alors que le domaine historique manipule encore un `pin` clair dans certains mocks ;
 - la couche applicative sert donc de pont temporaire et rend cette divergence explicite.
+
+Etat de branchement actuel :
+
+- l'UI mobile utilise maintenant `startMemberSession` puis `loginWithPin` dans un flow en deux temps ;
+- une RPC SQL minimale `verify_member_pin` sert de support concret au `PinVerifier` pour comparer `pin` et `pin_hash` sans introduire de systeme d'auth plus large ;
+- la session mobile reste volontairement limitee a un contexte simple, sans persistance auth forte.
 
 ### 4.8 `loadShop`
 
@@ -172,14 +179,13 @@ Responsabilites :
 - l'UI principale utilise encore largement le mock state ;
 - la strategie de cache et de refresh n'est pas encore definie ;
 - `dayKey` n'est pas encore fourni par un service unique partage ;
-- `members + session` est maintenant prepare cote application, mais l'UI n'est pas encore refondue pour consommer tout le flow ;
+- le flow d'entree famille / membre / PIN est branche, mais le reste de l'UI principale consomme encore largement le mock state ;
 - la persistance reelle du contexte mobile reste a brancher sur un storage adapte a React Native ;
 - les slices `daily points` ne sont pas encore branches de bout en bout.
 
 ## 7. Etapes logiques suivantes
 
-- brancher l'UI de selection famille puis membres sur ces nouveaux use cases ;
-- reconnecter ensuite la veritable auth PIN sur le membre deja selectionne ;
-- basculer ensuite `shop` vers les vrais use cases ;
+- basculer `shop` vers les vrais use cases ;
 - brancher `goals` ;
+- brancher ensuite le chargement initial complet des donnees du membre connecte ;
 - poser la meme approche pour `daily points` avec un calcul unique de `dayKey`.
