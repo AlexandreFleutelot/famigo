@@ -69,7 +69,8 @@ Etat :
 - verification PIN toujours delegatee a un `PinVerifier` abstrait ;
 - flow UI reel branche pour `famille -> membre -> PIN -> ouverture de session` ;
 - au redemarrage, si un membre etait deja selectionne, l'app revient a l'etape PIN ;
-- la persistance reste volontairement simple et ne constitue pas encore une session auth durable.
+- la persistance simple du contexte mobile est maintenant branchee sur `AsyncStorage` ;
+- cette persistance ne constitue toujours pas une session auth durable.
 
 ### 3.4 Daily points
 
@@ -99,7 +100,6 @@ Ils couvrent l'orchestration et les contrats, pas encore l'integration UI.
 ## 5. Points d'attention ouverts
 
 - mismatch temporaire entre `pin_hash` en base et `pin` dans une partie du domaine ;
-- la persistance definitive de la session mobile n'est pas encore branchee sur un storage React Native ;
 - coexistence provisoire entre modelisation domaine TypeScript et executions atomiques SQL ;
 - absence de strategie de cache mobile explicite ;
 - absence d'un service unique pour le calcul de `dayKey` ;
@@ -108,10 +108,10 @@ Ils couvrent l'orchestration et les contrats, pas encore l'integration UI.
 
 ## 6. Prochaine etape recommandee
 
-Maintenant que le flow d'entree reel est branche, la prochaine etape la plus rentable est de continuer la bascule de l'UI principale vers la couche `application`, en commencant par :
+Maintenant que le flow d'entree, la boutique, les objectifs et la persistance simple de session sont branches, la prochaine etape la plus rentable est de continuer la bascule de l'UI principale vers la couche `application`, en commencant par :
 
+- bascule de `daily points` hors de `mock-state` ;
 - chargement reel initial des donnees du membre connecte ;
-- bascule de la boutique sur `loadShop` puis `buyReward` ;
-- bascule des objectifs sur `loadGoals` puis `castGoalVote` ;
-- persistance reelle du contexte de session sur un storage React Native adapte ;
+- chargement reel de l'historique partage ;
+- reduction du role de `mock-state` pour `home`, `history` et `profile` ;
 - clarification ulterieure de la strategie definitive de verification PIN si besoin produit.

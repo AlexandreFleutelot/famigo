@@ -179,13 +179,14 @@ Responsabilites :
 - l'UI principale utilise encore largement le mock state ;
 - la strategie de cache et de refresh n'est pas encore definie ;
 - `dayKey` n'est pas encore fourni par un service unique partage ;
-- le flow d'entree famille / membre / PIN est branche, mais le reste de l'UI principale consomme encore largement le mock state ;
-- la persistance reelle du contexte mobile reste a brancher sur un storage adapte a React Native ;
+- le flow d'entree famille / membre / PIN, la boutique et les objectifs sont branches, mais le reste de l'UI principale consomme encore largement le mock state ;
+- la persistance du contexte mobile est maintenant branchee simplement sur `AsyncStorage` ;
 - les slices `daily points` ne sont pas encore branches de bout en bout.
 
 ## 7. Etapes logiques suivantes
 
-- basculer `shop` vers les vrais use cases ;
-- brancher `goals` ;
+- basculer `daily points` vers les vrais use cases ;
 - brancher ensuite le chargement initial complet des donnees du membre connecte ;
+- brancher un chargement reel de l'historique partage ;
+- reduire la dependance de `home` et `profile` aux projections issues du mock state ;
 - poser la meme approche pour `daily points` avec un calcul unique de `dayKey`.
